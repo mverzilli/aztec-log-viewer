@@ -1121,6 +1121,22 @@
       margin-top: 4px;
     }
 
+    .sysmap-tooltip-info {
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-style: italic;
+      background: rgba(0, 122, 204, 0.1);
+      border-left: 2px solid var(--accent);
+      padding: 6px 8px;
+      margin-top: 8px;
+      border-radius: 0 4px 4px 0;
+    }
+
+    .sysmap-tooltip-info::before {
+      content: 'ℹ ';
+      color: var(--accent);
+    }
+
     /* System Map Player (reuses time travel player) */
     .sysmap-player {
       background: var(--bg-secondary);
@@ -1542,6 +1558,7 @@
           <div class="sysmap-tooltip-title" id="sysmapTooltipTitle"></div>
           <div class="sysmap-tooltip-stats" id="sysmapTooltipStats"></div>
           <div class="sysmap-tooltip-last-msg" id="sysmapTooltipLastMsg"></div>
+          <div class="sysmap-tooltip-info hidden" id="sysmapTooltipInfo"></div>
         </div>
       </div>
     </div>
@@ -1572,6 +1589,39 @@
     let metadata = {};
     let testResults = { passed: [], failed: [] };
     let currentMode = 'logs';
+
+    // Component documentation - describes what each module type represents
+    const moduleDocumentation = {
+      // Pattern-based documentation (checked in order)
+      patterns: [
+        { pattern: /^p2p:\d+$/, info: 'P2P client instance for a specific node. Each number represents a different peer/validator in the network.' },
+        { pattern: /^p2p:/, info: 'P2P networking component handling peer discovery, message propagation, and network communication.' },
+        { pattern: /^node:\d+$/, info: 'Aztec node instance. Each number represents a different node in the network.' },
+        { pattern: /^sequencer:\d+$/, info: 'Block sequencer instance. Responsible for ordering transactions and producing blocks.' },
+        { pattern: /^sequencer:/, info: 'Block sequencer component handling transaction ordering and block production.' },
+        { pattern: /checkpoint-builder/, info: 'Builds checkpoints for L1 submission, aggregating state updates.' },
+        { pattern: /^e2e/, info: 'End-to-end test harness orchestrating the test scenario.' },
+        { pattern: /pxe/, info: 'Private Execution Environment - handles private transaction execution and proof generation.' },
+        { pattern: /archiver/, info: 'Archives and indexes L1 and L2 data for querying.' },
+        { pattern: /prover/, info: 'Generates zero-knowledge proofs for transactions and blocks.' },
+        { pattern: /world-state/, info: 'Manages the Merkle trees storing the global state.' },
+        { pattern: /simulator/, info: 'Simulates transaction execution for validation and gas estimation.' },
+        { pattern: /tx-provider/, info: 'Provides pending transactions to the sequencer.' },
+        { pattern: /validator/, info: 'Validates blocks and participates in consensus.' },
+        { pattern: /l1-publisher/, info: 'Publishes proofs and state updates to L1 (Ethereum).' },
+        { pattern: /aztec-node/, info: 'Main Aztec node coordinating all subsystems.' },
+      ]
+    };
+
+    function getModuleDocumentation(moduleName) {
+      const nameLower = moduleName.toLowerCase();
+      for (const { pattern, info } of moduleDocumentation.patterns) {
+        if (pattern.test(nameLower)) {
+          return info;
+        }
+      }
+      return null;
+    }
 
     // Time Travel State
     let ttPlaying = false;
@@ -2134,6 +2184,7 @@
     const sysmapTooltipTitle = document.getElementById('sysmapTooltipTitle');
     const sysmapTooltipStats = document.getElementById('sysmapTooltipStats');
     const sysmapTooltipLastMsg = document.getElementById('sysmapTooltipLastMsg');
+    const sysmapTooltipInfo = document.getElementById('sysmapTooltipInfo');
     const sysmapGroupingSelect = document.getElementById('sysmapGrouping');
     const sysmapInteractionWindowSelect = document.getElementById('sysmapInteractionWindow');
     const sysmapMinEventsSelect = document.getElementById('sysmapMinEvents');
@@ -2990,16 +3041,19 @@
 
     function computeHierarchyLevels() {
       // Assign each module to a hierarchy level based on call patterns
-      // Level 0 = sequencers (own tier)
-      // Level 1 = nodes (own tier)
-      // Level 2 = p2p instances (p2p:number) (own tier)
-      // Level 3+ = other modules by call patterns
+      // Level 0 = e2e (own tier)
+      // Level 1 = sequencers (own tier)
+      // Level 2 = nodes (own tier)
+      // Level 3 = p2p instances (p2p:number) (own tier)
+      // Level 4+ = other modules by call patterns
       smModuleLevels.clear();
 
       if (smGroupedModules.length === 0) return;
 
-      // Separate sequencers, nodes, p2p instances, and other modules
+      // Separate e2e, sequencers, checkpoint-builder, nodes, p2p instances, and other modules
+      const e2eModules = [];
       const sequencers = [];
+      const checkpointBuilders = [];
       const nodes = [];
       const p2pInstances = [];
       const otherModules = [];
@@ -3007,12 +3061,18 @@
       smGroupedModules.forEach(mod => {
         const nameLower = mod.name.toLowerCase();
         const lastPart = mod.name.split(':').pop();
+        const lastPartIsNumeric = /^\d+$/.test(lastPart);
 
-        if (nameLower.includes('sequencer')) {
+        if (nameLower.startsWith('e2e')) {
+          e2eModules.push(mod);
+        } else if (nameLower.includes('sequencer')) {
           sequencers.push(mod);
-        } else if (nameLower.includes('node')) {
+        } else if (nameLower.includes('checkpoint-builder')) {
+          checkpointBuilders.push(mod);
+        } else if (nameLower.includes('node') && lastPartIsNumeric) {
+          // node instances ending with a number (node:0, node:1, etc.)
           nodes.push(mod);
-        } else if (nameLower.startsWith('p2p') && /^\d+$/.test(lastPart)) {
+        } else if (nameLower.startsWith('p2p') && lastPartIsNumeric) {
           // p2p modules ending with a number (p2p:0, p2p:1, etc.)
           p2pInstances.push(mod);
         } else {
@@ -3020,12 +3080,24 @@
         }
       });
 
-      // Put all sequencers at level 0
+      // Put all e2e modules at level 0
       let currentLevel = 0;
+      e2eModules.forEach(mod => {
+        smModuleLevels.set(mod.name, currentLevel);
+      });
+      if (e2eModules.length > 0) currentLevel++;
+
+      // Put all sequencers at next level
       sequencers.forEach(mod => {
         smModuleLevels.set(mod.name, currentLevel);
       });
       if (sequencers.length > 0) currentLevel++;
+
+      // Put all checkpoint-builders at next level
+      checkpointBuilders.forEach(mod => {
+        smModuleLevels.set(mod.name, currentLevel);
+      });
+      if (checkpointBuilders.length > 0) currentLevel++;
 
       // Put all nodes at next level
       nodes.forEach(mod => {
@@ -3132,12 +3204,16 @@
           const totalWidth = numModsAtLevel * boxWidth + (numModsAtLevel - 1) * padding;
           const horizontalOffset = leftMargin + Math.max(padding, (availableWidth - totalWidth) / 2);
 
-          // Check if this level contains sequencers, nodes, or p2p instances (special tiers sorted by name)
+          // Check if this level contains e2e, sequencers, checkpoint-builder, node instances, or p2p instances (special tiers sorted by name)
           const isSpecialTier = modsAtLevel.every(mod => {
             const nameLower = mod.name.toLowerCase();
             const lastPart = mod.name.split(':').pop();
-            const isP2pInstance = nameLower.startsWith('p2p') && /^\d+$/.test(lastPart);
-            return nameLower.includes('sequencer') || nameLower.includes('node') || isP2pInstance;
+            const lastPartIsNumeric = /^\d+$/.test(lastPart);
+            const isE2e = nameLower.startsWith('e2e');
+            const isCheckpointBuilder = nameLower.includes('checkpoint-builder');
+            const isNodeInstance = nameLower.includes('node') && lastPartIsNumeric;
+            const isP2pInstance = nameLower.startsWith('p2p') && lastPartIsNumeric;
+            return isE2e || nameLower.includes('sequencer') || isCheckpointBuilder || isNodeInstance || isP2pInstance;
           });
 
           if (isSpecialTier) {
@@ -3768,6 +3844,15 @@
         sysmapTooltipLastMsg.style.display = 'block';
       } else {
         sysmapTooltipLastMsg.style.display = 'none';
+      }
+
+      // Show component documentation if available
+      const docInfo = getModuleDocumentation(mod.name);
+      if (docInfo) {
+        sysmapTooltipInfo.textContent = docInfo;
+        sysmapTooltipInfo.classList.remove('hidden');
+      } else {
+        sysmapTooltipInfo.classList.add('hidden');
       }
 
       sysmapTooltip.style.left = (mouseX + 15) + 'px';
