@@ -1,0 +1,3646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aztec E2E Test Log Viewer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #1e1e1e;
+      --bg-secondary: #252526;
+      --bg-tertiary: #2d2d30;
+      --text-primary: #d4d4d4;
+      --text-secondary: #858585;
+      --border-color: #3c3c3c;
+      --accent: #007acc;
+      --info-color: #4ec9b0;
+      --verbose-color: #569cd6;
+      --warn-color: #dcdcaa;
+      --error-color: #f14c4c;
+      --debug-color: #9cdcfe;
+    }
+
+    body {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: var(--bg-secondary);
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      margin-left: auto;
+    }
+
+    .btn {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+    }
+
+    .btn:hover {
+      background: var(--accent);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+    }
+
+    .btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    /* Mode Toggle */
+    .mode-toggle {
+      display: flex;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+
+    .mode-toggle .btn {
+      border: none;
+      border-radius: 0;
+      padding: 6px 16px;
+      font-size: 11px;
+    }
+
+    .mode-toggle .btn:not(:last-child) {
+      border-right: 1px solid var(--border-color);
+    }
+
+    /* Input Area */
+    .input-area {
+      background: var(--bg-secondary);
+      padding: 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .input-area.hidden {
+      display: none;
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      transition: all 0.2s;
+    }
+
+    .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(0, 122, 204, 0.1);
+    }
+
+    .drop-zone textarea {
+      width: 100%;
+      height: 200px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--text-primary);
+      padding: 12px;
+      font-family: inherit;
+      font-size: 12px;
+      resize: vertical;
+      margin-top: 15px;
+    }
+
+    .drop-zone textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .drop-zone p {
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+
+    /* Main Content */
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar.hidden {
+      display: none;
+    }
+
+    .sidebar-section {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .sidebar-section h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    /* Filter Controls */
+    .filter-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .filter-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      transition: all 0.15s;
+    }
+
+    .filter-btn.active {
+      color: var(--text-primary);
+    }
+
+    .filter-btn[data-level="info"].active {
+      background: rgba(78, 201, 176, 0.2);
+      border-color: var(--info-color);
+      color: var(--info-color);
+    }
+
+    .filter-btn[data-level="verbose"].active {
+      background: rgba(86, 156, 214, 0.2);
+      border-color: var(--verbose-color);
+      color: var(--verbose-color);
+    }
+
+    .filter-btn[data-level="warn"].active {
+      background: rgba(220, 220, 170, 0.2);
+      border-color: var(--warn-color);
+      color: var(--warn-color);
+    }
+
+    .filter-btn[data-level="error"].active {
+      background: rgba(241, 76, 76, 0.2);
+      border-color: var(--error-color);
+      color: var(--error-color);
+    }
+
+    .filter-btn[data-level="debug"].active {
+      background: rgba(156, 220, 254, 0.2);
+      border-color: var(--debug-color);
+      color: var(--debug-color);
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-size: 12px;
+      font-family: inherit;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* Module Tree */
+    .module-tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .module-item {
+      display: flex;
+      align-items: center;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 3px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .module-item:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .module-item.active {
+      background: rgba(0, 122, 204, 0.2);
+      color: var(--accent);
+    }
+
+    .module-item .count {
+      margin-left: auto;
+      font-size: 10px;
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+
+    .module-children {
+      margin-left: 16px;
+    }
+
+    .module-toggle {
+      width: 16px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+
+    /* Log View */
+    .log-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Metadata Header */
+    .metadata-header {
+      background: var(--bg-secondary);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 12px;
+    }
+
+    .metadata-header.hidden {
+      display: none;
+    }
+
+    .metadata-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 8px;
+    }
+
+    .metadata-item {
+      display: flex;
+      gap: 8px;
+    }
+
+    .metadata-item .label {
+      color: var(--text-secondary);
+      min-width: 80px;
+    }
+
+    .metadata-item .value {
+      color: var(--text-primary);
+      word-break: break-all;
+    }
+
+    .metadata-item .value a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .metadata-item .value a:hover {
+      text-decoration: underline;
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+      background: var(--bg-tertiary);
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+    }
+
+    .stats-bar.hidden {
+      display: none;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .stat-dot.info { background: var(--info-color); }
+    .stat-dot.verbose { background: var(--verbose-color); }
+    .stat-dot.warn { background: var(--warn-color); }
+    .stat-dot.error { background: var(--error-color); }
+    .stat-dot.debug { background: var(--debug-color); }
+
+    /* Log Entries */
+    .log-entries {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .log-entry {
+      display: flex;
+      padding: 2px 16px;
+      font-size: 12px;
+      line-height: 1.6;
+      border-left: 3px solid transparent;
+    }
+
+    .log-entry:hover {
+      background: var(--bg-secondary);
+    }
+
+    .log-entry.level-info {
+      border-left-color: var(--info-color);
+    }
+
+    .log-entry.level-verbose {
+      border-left-color: var(--verbose-color);
+    }
+
+    .log-entry.level-warn {
+      border-left-color: var(--warn-color);
+      background: rgba(220, 220, 170, 0.05);
+    }
+
+    .log-entry.level-error {
+      border-left-color: var(--error-color);
+      background: rgba(241, 76, 76, 0.1);
+    }
+
+    .log-entry.level-debug {
+      border-left-color: var(--debug-color);
+    }
+
+    .log-entry.hidden {
+      display: none;
+    }
+
+    .log-entry.tt-future {
+      opacity: 0.3;
+    }
+
+    .log-entry.tt-current {
+      background: rgba(0, 122, 204, 0.2);
+      border-left-width: 4px;
+    }
+
+    .log-time {
+      color: var(--text-secondary);
+      min-width: 90px;
+      flex-shrink: 0;
+    }
+
+    .log-level {
+      min-width: 70px;
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+
+    .log-level.info { color: var(--info-color); }
+    .log-level.verbose { color: var(--verbose-color); }
+    .log-level.warn { color: var(--warn-color); }
+    .log-level.error { color: var(--error-color); }
+    .log-level.debug { color: var(--debug-color); }
+
+    .log-module {
+      color: #ce9178;
+      min-width: 200px;
+      max-width: 300px;
+      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .log-message {
+      flex: 1;
+      word-break: break-word;
+    }
+
+    .log-message .highlight {
+      background: rgba(255, 255, 0, 0.3);
+      border-radius: 2px;
+    }
+
+    /* JSON Data */
+    .json-toggle {
+      color: var(--accent);
+      cursor: pointer;
+      margin-left: 8px;
+      font-size: 10px;
+      padding: 2px 6px;
+      background: var(--bg-tertiary);
+      border-radius: 3px;
+    }
+
+    .json-toggle:hover {
+      background: var(--accent);
+      color: white;
+    }
+
+    .json-data {
+      display: none;
+      margin-top: 8px;
+      margin-left: 360px;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .json-data.expanded {
+      display: block;
+    }
+
+    .json-key { color: #9cdcfe; }
+    .json-string { color: #ce9178; }
+    .json-number { color: #b5cea8; }
+    .json-boolean { color: #569cd6; }
+    .json-null { color: #569cd6; }
+
+    /* Test Results */
+    .test-results {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-color);
+      padding: 16px;
+    }
+
+    .test-results.hidden {
+      display: none;
+    }
+
+    .test-results h3 {
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .test-summary {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 12px;
+    }
+
+    .test-stat {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .test-stat.passed { color: var(--info-color); }
+    .test-stat.failed { color: var(--error-color); }
+
+    .test-stat span {
+      font-size: 12px;
+      font-weight: normal;
+      color: var(--text-secondary);
+      display: block;
+    }
+
+    .test-list {
+      font-size: 12px;
+    }
+
+    .test-item {
+      padding: 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .test-item.pass::before {
+      content: '✓';
+      color: var(--info-color);
+    }
+
+    .test-item.fail::before {
+      content: '✗';
+      color: var(--error-color);
+    }
+
+    /* Empty State */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-secondary);
+    }
+
+    .empty-state h2 {
+      font-size: 18px;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+
+    /* ============================================
+       TIME TRAVEL MODE STYLES
+       ============================================ */
+
+    .time-travel-container {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .time-travel-container.active {
+      display: flex;
+    }
+
+    .log-view-container {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .log-view-container.hidden {
+      display: none;
+    }
+
+    /* Player Controls */
+    .player-controls {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 16px 20px;
+    }
+
+    .player-main {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .player-buttons {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .player-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 0.15s;
+    }
+
+    .player-btn:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .player-btn.play-pause {
+      width: 44px;
+      height: 44px;
+      font-size: 18px;
+    }
+
+    .player-btn.playing {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .player-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .player-btn.play-pause svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .player-time {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-family: monospace;
+      min-width: 200px;
+    }
+
+    .player-time .current {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .player-time .separator {
+      color: var(--text-secondary);
+    }
+
+    .player-time .total {
+      color: var(--text-secondary);
+    }
+
+    .player-speed {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .player-speed label {
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .speed-select {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .speed-select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .player-log-counter {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .player-log-counter span {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Timeline */
+    .timeline-container {
+      position: relative;
+      height: 24px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+
+    .timeline-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background: rgba(0, 122, 204, 0.3);
+      pointer-events: none;
+    }
+
+    .timeline-scrubber {
+      position: absolute;
+      top: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--accent);
+      cursor: ew-resize;
+      z-index: 10;
+    }
+
+    .timeline-scrubber::after {
+      content: '';
+      position: absolute;
+      top: -4px;
+      left: -6px;
+      width: 15px;
+      height: 32px;
+    }
+
+    .timeline-markers {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+    }
+
+    .timeline-marker {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      opacity: 0.6;
+    }
+
+    .timeline-marker.error { background: var(--error-color); }
+    .timeline-marker.warn { background: var(--warn-color); }
+
+    /* Module Activity Lanes */
+    .activity-lanes {
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-color);
+      overflow-y: auto;
+      max-height: 200px;
+      min-height: 100px;
+    }
+
+    .activity-lane {
+      display: flex;
+      align-items: center;
+      height: 28px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .activity-lane:last-child {
+      border-bottom: none;
+    }
+
+    .lane-label {
+      width: 200px;
+      padding: 0 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      background: var(--bg-secondary);
+      height: 100%;
+      display: flex;
+      align-items: center;
+      border-right: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+
+    .lane-label.active {
+      color: var(--accent);
+      background: rgba(0, 122, 204, 0.1);
+    }
+
+    .lane-timeline {
+      flex: 1;
+      height: 100%;
+      position: relative;
+      background: var(--bg-tertiary);
+    }
+
+    .lane-event {
+      position: absolute;
+      top: 4px;
+      height: 20px;
+      min-width: 4px;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .lane-event:hover {
+      opacity: 0.8;
+    }
+
+    .lane-event.info { background: var(--info-color); }
+    .lane-event.verbose { background: var(--verbose-color); }
+    .lane-event.warn { background: var(--warn-color); }
+    .lane-event.error { background: var(--error-color); }
+    .lane-event.debug { background: var(--debug-color); }
+
+    .lane-event.future {
+      opacity: 0.2;
+    }
+
+    .lane-playhead {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      background: var(--accent);
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    /* Time Travel Log Feed */
+    .tt-log-feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+      background: var(--bg-primary);
+    }
+
+    .tt-log-entry {
+      display: flex;
+      padding: 4px 16px;
+      font-size: 12px;
+      line-height: 1.6;
+      border-left: 3px solid transparent;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .tt-log-entry.level-info { border-left-color: var(--info-color); }
+    .tt-log-entry.level-verbose { border-left-color: var(--verbose-color); }
+    .tt-log-entry.level-warn { border-left-color: var(--warn-color); background: rgba(220, 220, 170, 0.05); }
+    .tt-log-entry.level-error { border-left-color: var(--error-color); background: rgba(241, 76, 76, 0.1); }
+    .tt-log-entry.level-debug { border-left-color: var(--debug-color); }
+
+    /* Current Module Indicator */
+    .current-activity {
+      background: var(--bg-secondary);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+    }
+
+    .current-activity.hidden {
+      display: none;
+    }
+
+    .current-activity-label {
+      color: var(--text-secondary);
+    }
+
+    .current-activity-modules {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .current-module-badge {
+      padding: 4px 10px;
+      background: rgba(0, 122, 204, 0.2);
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      color: var(--accent);
+      font-size: 11px;
+    }
+
+    /* ============================================
+       SYSTEM MAP MODE STYLES
+       ============================================ */
+
+    .system-map-container {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .system-map-container.active {
+      display: flex;
+    }
+
+    /* System Map Controls */
+    .sysmap-controls {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .sysmap-controls label {
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .sysmap-select {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .sysmap-time-display {
+      margin-left: auto;
+      font-size: 13px;
+      font-family: monospace;
+      color: var(--text-secondary);
+    }
+
+    .sysmap-time-display .current {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Canvas Container */
+    .sysmap-canvas-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    .sysmap-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    /* Component Boxes (rendered via canvas, but tooltip overlay) */
+    .sysmap-tooltip {
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12px;
+      max-width: 350px;
+      z-index: 1000;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .sysmap-tooltip.hidden {
+      display: none;
+    }
+
+    .sysmap-tooltip-title {
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+
+    .sysmap-tooltip-stats {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 4px 12px;
+      margin-bottom: 8px;
+    }
+
+    .sysmap-tooltip-stats .label {
+      color: var(--text-secondary);
+    }
+
+    .sysmap-tooltip-stats .value {
+      color: var(--text-primary);
+    }
+
+    .sysmap-tooltip-last-msg {
+      color: var(--text-secondary);
+      font-size: 11px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 8px;
+      margin-top: 4px;
+    }
+
+    /* System Map Player (reuses time travel player) */
+    .sysmap-player {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-color);
+      padding: 12px 20px;
+    }
+
+    .sysmap-player-main {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 10px;
+    }
+
+    /* Legend */
+    .sysmap-legend {
+      display: flex;
+      gap: 16px;
+      padding: 8px 20px;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-color);
+      font-size: 11px;
+    }
+
+    .sysmap-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-secondary);
+    }
+
+    .sysmap-legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    .sysmap-legend-color.active {
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    .sysmap-legend-color.recent {
+      background: rgba(0, 122, 204, 0.5);
+    }
+
+    .sysmap-legend-color.idle {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+    }
+
+    .sysmap-legend-line {
+      width: 20px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--bg-tertiary);
+      border-radius: 5px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4a4a4a;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .sidebar {
+        width: 220px;
+      }
+
+      .log-module {
+        min-width: 120px;
+        max-width: 150px;
+      }
+
+      .json-data {
+        margin-left: 16px;
+      }
+
+      .lane-label {
+        width: 120px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .sidebar {
+        display: none;
+      }
+
+      .log-entry {
+        flex-wrap: wrap;
+      }
+
+      .log-module {
+        width: 100%;
+        max-width: none;
+      }
+
+      .activity-lanes {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Aztec E2E Test Log Viewer</h1>
+      <div class="mode-toggle" id="modeToggle">
+        <button class="btn active" data-mode="logs">Log View</button>
+        <button class="btn" data-mode="timetravel">Time Travel</button>
+        <button class="btn" data-mode="systemmap">System Map</button>
+      </div>
+      <div class="header-actions">
+        <button class="btn" id="toggleInput">Load Logs</button>
+        <button class="btn" id="clearLogs">Clear</button>
+        <button class="btn" id="toggleAutoScroll">Auto-scroll: Off</button>
+      </div>
+    </header>
+
+    <div class="input-area" id="inputArea">
+      <div class="drop-zone" id="dropZone">
+        <p>Drag & drop a log file here, or paste log content below</p>
+        <input type="file" id="fileInput" style="display: none" accept=".log,.txt">
+        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Choose File</button>
+        <textarea id="logInput" placeholder="Paste log content here..."></textarea>
+        <div style="margin-top: 12px">
+          <button class="btn btn-primary" id="parseBtn">Parse Logs</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <aside class="sidebar hidden" id="sidebar">
+        <div class="sidebar-section">
+          <h3>Log Levels</h3>
+          <div class="filter-group" id="levelFilters">
+            <button class="filter-btn active" data-level="error">ERROR</button>
+            <button class="filter-btn active" data-level="warn">WARN</button>
+            <button class="filter-btn active" data-level="info">INFO</button>
+            <button class="filter-btn active" data-level="verbose">VERBOSE</button>
+            <button class="filter-btn active" data-level="debug">DEBUG</button>
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <h3>Search</h3>
+          <input type="text" class="search-input" id="searchInput" placeholder="Search messages...">
+        </div>
+        <div class="sidebar-section">
+          <h3>Module Filter</h3>
+          <input type="text" class="search-input" id="moduleSearch" placeholder="Filter modules...">
+        </div>
+        <div class="module-tree" id="moduleTree"></div>
+      </aside>
+
+      <!-- Standard Log View -->
+      <main class="log-view log-view-container" id="logViewContainer">
+        <div class="metadata-header hidden" id="metadataHeader">
+          <div class="metadata-grid" id="metadataGrid"></div>
+        </div>
+
+        <div class="stats-bar hidden" id="statsBar">
+          <div class="stat-item">
+            <span class="stat-dot error"></span>
+            <span id="errorCount">0</span> errors
+          </div>
+          <div class="stat-item">
+            <span class="stat-dot warn"></span>
+            <span id="warnCount">0</span> warnings
+          </div>
+          <div class="stat-item">
+            <span class="stat-dot info"></span>
+            <span id="infoCount">0</span> info
+          </div>
+          <div class="stat-item">
+            <span class="stat-dot verbose"></span>
+            <span id="verboseCount">0</span> verbose
+          </div>
+          <div class="stat-item">
+            <span class="stat-dot debug"></span>
+            <span id="debugCount">0</span> debug
+          </div>
+          <div class="stat-item" style="margin-left: auto">
+            Showing <span id="visibleCount">0</span> of <span id="totalCount">0</span>
+          </div>
+        </div>
+
+        <div class="log-entries" id="logEntries">
+          <div class="empty-state">
+            <h2>No logs loaded</h2>
+            <p>Paste log content or drag & drop a file to get started</p>
+          </div>
+        </div>
+
+        <div class="test-results hidden" id="testResults">
+          <h3>Test Results</h3>
+          <div class="test-summary">
+            <div class="test-stat passed">
+              <span>Passed</span>
+              <span id="passedTests">0</span>
+            </div>
+            <div class="test-stat failed">
+              <span>Failed</span>
+              <span id="failedTests">0</span>
+            </div>
+          </div>
+          <div class="test-list" id="testList"></div>
+        </div>
+      </main>
+
+      <!-- Time Travel View -->
+      <div class="time-travel-container" id="timeTravelContainer">
+        <!-- Player Controls -->
+        <div class="player-controls">
+          <div class="player-main">
+            <div class="player-buttons">
+              <button class="player-btn" id="ttSkipStart" title="Go to start">
+                <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+              </button>
+              <button class="player-btn" id="ttStepBack" title="Step back">
+                <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+              </button>
+              <button class="player-btn play-pause" id="ttPlayPause" title="Play/Pause">
+                <svg class="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                <svg class="pause-icon" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              </button>
+              <button class="player-btn" id="ttStepForward" title="Step forward">
+                <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+              </button>
+              <button class="player-btn" id="ttSkipEnd" title="Go to end">
+                <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+              </button>
+            </div>
+
+            <div class="player-time">
+              <span class="current" id="ttCurrentTime">00:00:00.000</span>
+              <span class="separator">/</span>
+              <span class="total" id="ttTotalTime">00:00:00.000</span>
+            </div>
+
+            <div class="player-speed">
+              <label>Speed:</label>
+              <select class="speed-select" id="ttSpeed">
+                <option value="0.25">0.25x</option>
+                <option value="0.5">0.5x</option>
+                <option value="1" selected>1x</option>
+                <option value="2">2x</option>
+                <option value="5">5x</option>
+                <option value="10">10x</option>
+                <option value="25">25x</option>
+                <option value="50">50x</option>
+                <option value="100">100x</option>
+              </select>
+            </div>
+
+            <div class="player-log-counter">
+              Log <span id="ttCurrentLog">0</span> of <span id="ttTotalLogs">0</span>
+            </div>
+          </div>
+
+          <div class="timeline-container" id="ttTimeline">
+            <div class="timeline-progress" id="ttProgress"></div>
+            <div class="timeline-markers" id="ttMarkers"></div>
+            <div class="timeline-scrubber" id="ttScrubber"></div>
+          </div>
+        </div>
+
+        <!-- Current Activity -->
+        <div class="current-activity hidden" id="ttCurrentActivity">
+          <span class="current-activity-label">Active modules:</span>
+          <div class="current-activity-modules" id="ttActiveModules"></div>
+        </div>
+
+        <!-- Module Activity Lanes -->
+        <div class="activity-lanes" id="ttActivityLanes"></div>
+
+        <!-- Time Travel Log Feed -->
+        <div class="tt-log-feed" id="ttLogFeed">
+          <div class="empty-state">
+            <h2>Time Travel Mode</h2>
+            <p>Press play to watch logs unfold in real-time</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- System Map View -->
+      <div class="system-map-container" id="systemMapContainer">
+        <!-- Legend -->
+        <div class="sysmap-legend">
+          <div class="sysmap-legend-item">
+            <div class="sysmap-legend-color active"></div>
+            <span>Currently active</span>
+          </div>
+          <div class="sysmap-legend-item">
+            <div class="sysmap-legend-color recent"></div>
+            <span>Recently active</span>
+          </div>
+          <div class="sysmap-legend-item">
+            <div class="sysmap-legend-color idle"></div>
+            <span>Idle</span>
+          </div>
+          <div class="sysmap-legend-item">
+            <div class="sysmap-legend-line"></div>
+            <span>Interaction flow</span>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="sysmap-controls">
+          <label>Layout:</label>
+          <select class="sysmap-select" id="sysmapLayout">
+            <option value="grid">Grid</option>
+            <option value="hierarchy" selected>Hierarchy</option>
+          </select>
+
+          <label>Grouping:</label>
+          <select class="sysmap-select" id="sysmapGrouping">
+            <option value="0">Top-level only</option>
+            <option value="1" selected>1 level deep</option>
+            <option value="2">2 levels deep</option>
+            <option value="99">All levels</option>
+          </select>
+
+          <label>Interaction window:</label>
+          <select class="sysmap-select" id="sysmapInteractionWindow">
+            <option value="50">50ms</option>
+            <option value="100" selected>100ms</option>
+            <option value="250">250ms</option>
+            <option value="500">500ms</option>
+          </select>
+
+          <label>Min events:</label>
+          <select class="sysmap-select" id="sysmapMinEvents">
+            <option value="1">1+</option>
+            <option value="5">5+</option>
+            <option value="10" selected>10+</option>
+            <option value="50">50+</option>
+          </select>
+
+          <div class="sysmap-time-display">
+            <span class="current" id="sysmapCurrentTime">00:00:00.000</span>
+            <span> / </span>
+            <span id="sysmapTotalTime">00:00:00.000</span>
+          </div>
+        </div>
+
+        <!-- Canvas -->
+        <div class="sysmap-canvas-container" id="sysmapCanvasContainer">
+          <canvas class="sysmap-canvas" id="sysmapCanvas"></canvas>
+        </div>
+
+        <!-- Player Controls -->
+        <div class="sysmap-player">
+          <div class="sysmap-player-main">
+            <div class="player-buttons">
+              <button class="player-btn" id="smSkipStart" title="Go to start">
+                <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+              </button>
+              <button class="player-btn" id="smStepBack" title="Step back">
+                <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+              </button>
+              <button class="player-btn play-pause" id="smPlayPause" title="Play/Pause">
+                <svg class="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                <svg class="pause-icon" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              </button>
+              <button class="player-btn" id="smStepForward" title="Step forward">
+                <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+              </button>
+              <button class="player-btn" id="smSkipEnd" title="Go to end">
+                <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+              </button>
+            </div>
+
+            <div class="player-speed">
+              <label>Speed:</label>
+              <select class="speed-select" id="smSpeed">
+                <option value="0.25">0.25x</option>
+                <option value="0.5">0.5x</option>
+                <option value="1" selected>1x</option>
+                <option value="2">2x</option>
+                <option value="5">5x</option>
+                <option value="10">10x</option>
+                <option value="25">25x</option>
+                <option value="50">50x</option>
+                <option value="100">100x</option>
+              </select>
+            </div>
+
+            <div class="player-log-counter">
+              Log <span id="smCurrentLog">0</span> of <span id="smTotalLogs">0</span>
+            </div>
+          </div>
+
+          <div class="timeline-container" id="smTimeline">
+            <div class="timeline-progress" id="smProgress"></div>
+            <div class="timeline-markers" id="smMarkers"></div>
+            <div class="timeline-scrubber" id="smScrubber"></div>
+          </div>
+        </div>
+
+        <!-- Tooltip -->
+        <div class="sysmap-tooltip hidden" id="sysmapTooltip">
+          <div class="sysmap-tooltip-title" id="sysmapTooltipTitle"></div>
+          <div class="sysmap-tooltip-stats" id="sysmapTooltipStats"></div>
+          <div class="sysmap-tooltip-last-msg" id="sysmapTooltipLastMsg"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let logEntries = [];
+    let modules = new Map();
+    let activeModules = new Set();
+    let activeLevels = new Set(['error', 'warn', 'info', 'verbose', 'debug']);
+    let searchTerm = '';
+    let autoScroll = false;
+    let metadata = {};
+    let testResults = { passed: [], failed: [] };
+    let currentMode = 'logs';
+
+    // Time Travel State
+    let ttPlaying = false;
+    let ttCurrentIndex = 0;
+    let ttPlaybackSpeed = 1;
+    let ttAnimationFrame = null;
+    let ttLastFrameTime = 0;
+    let ttAccumulatedTime = 0;
+    let ttStartTimeMs = 0;
+    let ttEndTimeMs = 0;
+    let ttCurrentTimeMs = 0;
+    let ttTopModules = [];
+
+    // DOM Elements
+    const inputArea = document.getElementById('inputArea');
+    const dropZone = document.getElementById('dropZone');
+    const logInput = document.getElementById('logInput');
+    const fileInput = document.getElementById('fileInput');
+    const parseBtn = document.getElementById('parseBtn');
+    const toggleInputBtn = document.getElementById('toggleInput');
+    const clearBtn = document.getElementById('clearLogs');
+    const autoScrollBtn = document.getElementById('toggleAutoScroll');
+    const sidebar = document.getElementById('sidebar');
+    const levelFilters = document.getElementById('levelFilters');
+    const searchInput = document.getElementById('searchInput');
+    const moduleSearch = document.getElementById('moduleSearch');
+    const moduleTree = document.getElementById('moduleTree');
+    const metadataHeader = document.getElementById('metadataHeader');
+    const metadataGrid = document.getElementById('metadataGrid');
+    const statsBar = document.getElementById('statsBar');
+    const logEntriesContainer = document.getElementById('logEntries');
+    const testResultsSection = document.getElementById('testResults');
+    const modeToggle = document.getElementById('modeToggle');
+    const logViewContainer = document.getElementById('logViewContainer');
+    const timeTravelContainer = document.getElementById('timeTravelContainer');
+
+    // Time Travel DOM Elements
+    const ttPlayPauseBtn = document.getElementById('ttPlayPause');
+    const ttStepBackBtn = document.getElementById('ttStepBack');
+    const ttStepForwardBtn = document.getElementById('ttStepForward');
+    const ttSkipStartBtn = document.getElementById('ttSkipStart');
+    const ttSkipEndBtn = document.getElementById('ttSkipEnd');
+    const ttSpeedSelect = document.getElementById('ttSpeed');
+    const ttTimeline = document.getElementById('ttTimeline');
+    const ttProgress = document.getElementById('ttProgress');
+    const ttScrubber = document.getElementById('ttScrubber');
+    const ttMarkers = document.getElementById('ttMarkers');
+    const ttCurrentTimeEl = document.getElementById('ttCurrentTime');
+    const ttTotalTimeEl = document.getElementById('ttTotalTime');
+    const ttCurrentLogEl = document.getElementById('ttCurrentLog');
+    const ttTotalLogsEl = document.getElementById('ttTotalLogs');
+    const ttLogFeed = document.getElementById('ttLogFeed');
+    const ttActivityLanes = document.getElementById('ttActivityLanes');
+    const ttCurrentActivity = document.getElementById('ttCurrentActivity');
+    const ttActiveModulesEl = document.getElementById('ttActiveModules');
+
+    // Log parsing regex
+    const LOG_REGEX = /^(\d{2}:\d{2}:\d{2})\s+\[(\d{2}:\d{2}:\d{2}\.\d{3})\]\s+(INFO|VERBOSE|WARN|ERROR|DEBUG):\s+(\S+)\s+(.*)$/;
+
+    // Parse time string to milliseconds
+    function parseTimeToMs(timeStr) {
+      const match = timeStr.match(/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/);
+      if (!match) return 0;
+      const [, h, m, s, ms] = match;
+      return parseInt(h) * 3600000 + parseInt(m) * 60000 + parseInt(s) * 1000 + parseInt(ms);
+    }
+
+    // Format milliseconds to time string
+    function formatMsToTime(ms) {
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      const msRemainder = ms % 1000;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(msRemainder).padStart(3, '0')}`;
+    }
+
+    // Parse metadata from header
+    function parseMetadata(lines) {
+      const meta = {};
+      const metaKeys = ['Parent Log', 'Command', 'Commit', 'Env', 'Date', 'System', 'Resources', 'History'];
+
+      for (const line of lines) {
+        for (const key of metaKeys) {
+          if (line.startsWith(key + ':')) {
+            meta[key] = line.substring(key.length + 1).trim();
+            break;
+          }
+        }
+      }
+
+      return meta;
+    }
+
+    // Parse JSON from end of message
+    function extractJson(message) {
+      const jsonMatch = message.match(/\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})\s*$/);
+      if (jsonMatch) {
+        try {
+          const json = JSON.parse(jsonMatch[1]);
+          const cleanMessage = message.substring(0, message.length - jsonMatch[0].length).trim();
+          return { message: cleanMessage, json };
+        } catch (e) {
+          // Not valid JSON
+        }
+      }
+      return { message, json: null };
+    }
+
+    // Parse log line
+    function parseLogLine(line, index) {
+      const match = line.match(LOG_REGEX);
+      if (!match) return null;
+
+      const [, wallTime, elapsedTime, level, module, rawMessage] = match;
+      const { message, json } = extractJson(rawMessage);
+
+      return {
+        index,
+        wallTime,
+        elapsedTime,
+        elapsedTimeMs: parseTimeToMs(elapsedTime),
+        level: level.toLowerCase(),
+        module,
+        message,
+        json,
+        raw: line
+      };
+    }
+
+    // Parse test results
+    function parseTestResults(lines) {
+      const results = { passed: [], failed: [] };
+
+      for (const line of lines) {
+        if (line.match(/^\s*(PASS|FAIL)\s+/)) {
+          const isPass = line.startsWith('PASS') || line.includes(' PASS ');
+          const testName = line.replace(/^\s*(PASS|FAIL)\s+/, '').trim();
+          if (isPass) {
+            results.passed.push(testName);
+          } else {
+            results.failed.push(testName);
+          }
+        }
+      }
+
+      return results;
+    }
+
+    // Parse all logs
+    function parseLogs(content) {
+      const lines = content.split('\n');
+      const entries = [];
+      const mods = new Map();
+
+      metadata = parseMetadata(lines.slice(0, 20));
+      testResults = parseTestResults(lines);
+
+      let lineIndex = 0;
+      for (const line of lines) {
+        const entry = parseLogLine(line.trim(), lineIndex++);
+        if (entry) {
+          entries.push(entry);
+
+          const modCount = mods.get(entry.module) || 0;
+          mods.set(entry.module, modCount + 1);
+        }
+      }
+
+      logEntries = entries;
+      modules = mods;
+      activeModules = new Set(modules.keys());
+
+      // Calculate time range for time travel
+      if (entries.length > 0) {
+        ttStartTimeMs = entries[0].elapsedTimeMs;
+        ttEndTimeMs = entries[entries.length - 1].elapsedTimeMs;
+        ttCurrentTimeMs = ttStartTimeMs;
+
+        // Get top modules by count
+        ttTopModules = [...mods.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 15)
+          .map(([mod]) => mod);
+      }
+
+      return entries;
+    }
+
+    // Render metadata header
+    function renderMetadata() {
+      if (Object.keys(metadata).length === 0) {
+        metadataHeader.classList.add('hidden');
+        return;
+      }
+
+      metadataHeader.classList.remove('hidden');
+      metadataGrid.innerHTML = '';
+
+      for (const [key, value] of Object.entries(metadata)) {
+        const item = document.createElement('div');
+        item.className = 'metadata-item';
+
+        let displayValue = value;
+        if (value.startsWith('http')) {
+          displayValue = `<a href="${value}" target="_blank">${value}</a>`;
+        }
+
+        item.innerHTML = `
+          <span class="label">${key}:</span>
+          <span class="value">${displayValue}</span>
+        `;
+        metadataGrid.appendChild(item);
+      }
+    }
+
+    // Render stats bar
+    function renderStats() {
+      if (logEntries.length === 0) {
+        statsBar.classList.add('hidden');
+        return;
+      }
+
+      statsBar.classList.remove('hidden');
+
+      const counts = { error: 0, warn: 0, info: 0, verbose: 0, debug: 0 };
+      logEntries.forEach(e => counts[e.level]++);
+
+      document.getElementById('errorCount').textContent = counts.error;
+      document.getElementById('warnCount').textContent = counts.warn;
+      document.getElementById('infoCount').textContent = counts.info;
+      document.getElementById('verboseCount').textContent = counts.verbose;
+      document.getElementById('debugCount').textContent = counts.debug;
+      document.getElementById('totalCount').textContent = logEntries.length;
+
+      updateVisibleCount();
+    }
+
+    // Update visible count
+    function updateVisibleCount() {
+      const visible = document.querySelectorAll('.log-entry:not(.hidden)').length;
+      document.getElementById('visibleCount').textContent = visible;
+    }
+
+    // Syntax highlight JSON
+    function highlightJson(obj, indent = 0) {
+      const spaces = '  '.repeat(indent);
+
+      if (obj === null) {
+        return '<span class="json-null">null</span>';
+      }
+
+      if (typeof obj === 'boolean') {
+        return `<span class="json-boolean">${obj}</span>`;
+      }
+
+      if (typeof obj === 'number') {
+        return `<span class="json-number">${obj}</span>`;
+      }
+
+      if (typeof obj === 'string') {
+        const escaped = obj.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return `<span class="json-string">"${escaped}"</span>`;
+      }
+
+      if (Array.isArray(obj)) {
+        if (obj.length === 0) return '[]';
+        const items = obj.map(item => spaces + '  ' + highlightJson(item, indent + 1));
+        return '[\n' + items.join(',\n') + '\n' + spaces + ']';
+      }
+
+      if (typeof obj === 'object') {
+        const keys = Object.keys(obj);
+        if (keys.length === 0) return '{}';
+        const items = keys.map(key => {
+          const escapedKey = key.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          return spaces + '  ' + `<span class="json-key">"${escapedKey}"</span>: ` + highlightJson(obj[key], indent + 1);
+        });
+        return '{\n' + items.join(',\n') + '\n' + spaces + '}';
+      }
+
+      return String(obj);
+    }
+
+    // Render log entries
+    function renderLogEntries() {
+      if (logEntries.length === 0) {
+        logEntriesContainer.innerHTML = `
+          <div class="empty-state">
+            <h2>No logs loaded</h2>
+            <p>Paste log content or drag & drop a file to get started</p>
+          </div>
+        `;
+        return;
+      }
+
+      logEntriesContainer.innerHTML = '';
+
+      for (const entry of logEntries) {
+        const div = document.createElement('div');
+        div.className = `log-entry level-${entry.level}`;
+        div.dataset.index = entry.index;
+        div.dataset.level = entry.level;
+        div.dataset.module = entry.module;
+
+        let messageHtml = entry.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        let jsonHtml = '';
+        if (entry.json) {
+          jsonHtml = `
+            <span class="json-toggle" onclick="toggleJson(this)">JSON</span>
+            <div class="json-data">${highlightJson(entry.json)}</div>
+          `;
+        }
+
+        div.innerHTML = `
+          <span class="log-time">${entry.elapsedTime}</span>
+          <span class="log-level ${entry.level}">${entry.level.toUpperCase()}</span>
+          <span class="log-module" title="${entry.module}">${entry.module}</span>
+          <span class="log-message">${messageHtml}${jsonHtml}</span>
+        `;
+
+        logEntriesContainer.appendChild(div);
+      }
+
+      applyFilters();
+    }
+
+    // Toggle JSON display
+    window.toggleJson = function(btn) {
+      const jsonData = btn.nextElementSibling;
+      jsonData.classList.toggle('expanded');
+      btn.textContent = jsonData.classList.contains('expanded') ? 'Hide' : 'JSON';
+    };
+
+    // Render module tree
+    function renderModuleTree() {
+      moduleTree.innerHTML = '';
+
+      const tree = new Map();
+      for (const [mod, count] of modules) {
+        const parts = mod.split(':');
+        let current = tree;
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          const fullPath = parts.slice(0, i + 1).join(':');
+          if (!current.has(part)) {
+            current.set(part, { fullPath, count: 0, children: new Map() });
+          }
+          const node = current.get(part);
+          if (i === parts.length - 1) {
+            node.count = count;
+          }
+          current = node.children;
+        }
+      }
+
+      function renderNode(name, node, depth = 0) {
+        const div = document.createElement('div');
+        div.className = 'module-item' + (activeModules.has(node.fullPath) ? ' active' : '');
+        div.style.paddingLeft = (depth * 16 + 8) + 'px';
+        div.dataset.module = node.fullPath;
+
+        const hasChildren = node.children.size > 0;
+        div.innerHTML = `
+          <span class="module-toggle">${hasChildren ? '▶' : ''}</span>
+          <span>${name}</span>
+          <span class="count">${node.count}</span>
+        `;
+
+        div.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleModule(node.fullPath);
+        });
+
+        moduleTree.appendChild(div);
+
+        if (hasChildren) {
+          for (const [childName, childNode] of node.children) {
+            renderNode(childName, childNode, depth + 1);
+          }
+        }
+      }
+
+      const allDiv = document.createElement('div');
+      allDiv.className = 'module-item' + (activeModules.size === modules.size ? ' active' : '');
+      allDiv.innerHTML = `
+        <span class="module-toggle"></span>
+        <span>All Modules</span>
+        <span class="count">${logEntries.length}</span>
+      `;
+      allDiv.addEventListener('click', () => {
+        activeModules = new Set(modules.keys());
+        renderModuleTree();
+        applyFilters();
+      });
+      moduleTree.appendChild(allDiv);
+
+      for (const [name, node] of tree) {
+        renderNode(name, node);
+      }
+    }
+
+    // Toggle module filter
+    function toggleModule(modulePath) {
+      if (activeModules.has(modulePath)) {
+        activeModules.delete(modulePath);
+      } else {
+        activeModules.add(modulePath);
+      }
+      renderModuleTree();
+      applyFilters();
+    }
+
+    // Render test results
+    function renderTestResults() {
+      if (testResults.passed.length === 0 && testResults.failed.length === 0) {
+        testResultsSection.classList.add('hidden');
+        return;
+      }
+
+      testResultsSection.classList.remove('hidden');
+      document.getElementById('passedTests').textContent = testResults.passed.length;
+      document.getElementById('failedTests').textContent = testResults.failed.length;
+
+      const testList = document.getElementById('testList');
+      testList.innerHTML = '';
+
+      for (const test of testResults.failed) {
+        const div = document.createElement('div');
+        div.className = 'test-item fail';
+        div.textContent = test;
+        testList.appendChild(div);
+      }
+
+      for (const test of testResults.passed) {
+        const div = document.createElement('div');
+        div.className = 'test-item pass';
+        div.textContent = test;
+        testList.appendChild(div);
+      }
+    }
+
+    // Apply filters
+    function applyFilters() {
+      const entries = document.querySelectorAll('.log-entry');
+      const searchLower = searchTerm.toLowerCase();
+
+      entries.forEach(entry => {
+        const level = entry.dataset.level;
+        const module = entry.dataset.module;
+        const message = entry.querySelector('.log-message').textContent.toLowerCase();
+
+        let visible = true;
+
+        if (!activeLevels.has(level)) {
+          visible = false;
+        }
+
+        if (visible && !activeModules.has(module)) {
+          let hasParent = false;
+          for (const activeMod of activeModules) {
+            if (module.startsWith(activeMod + ':') || module === activeMod) {
+              hasParent = true;
+              break;
+            }
+          }
+          if (!hasParent) visible = false;
+        }
+
+        if (visible && searchTerm && !message.includes(searchLower) && !module.toLowerCase().includes(searchLower)) {
+          visible = false;
+        }
+
+        entry.classList.toggle('hidden', !visible);
+
+        if (searchTerm && visible) {
+          const msgSpan = entry.querySelector('.log-message');
+          const originalText = logEntries[entry.dataset.index].message;
+          const escapedText = originalText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+          msgSpan.innerHTML = escapedText.replace(regex, '<span class="highlight">$1</span>');
+
+          const logEntry = logEntries[entry.dataset.index];
+          if (logEntry.json) {
+            msgSpan.innerHTML += `
+              <span class="json-toggle" onclick="toggleJson(this)">JSON</span>
+              <div class="json-data">${highlightJson(logEntry.json)}</div>
+            `;
+          }
+        }
+      });
+
+      updateVisibleCount();
+    }
+
+    // ============================================
+    // TIME TRAVEL MODE
+    // ============================================
+
+    // System Map DOM elements
+    const systemMapContainer = document.getElementById('systemMapContainer');
+    const sysmapCanvas = document.getElementById('sysmapCanvas');
+    const sysmapCanvasContainer = document.getElementById('sysmapCanvasContainer');
+    const sysmapCtx = sysmapCanvas.getContext('2d');
+    const sysmapTooltip = document.getElementById('sysmapTooltip');
+    const sysmapTooltipTitle = document.getElementById('sysmapTooltipTitle');
+    const sysmapTooltipStats = document.getElementById('sysmapTooltipStats');
+    const sysmapTooltipLastMsg = document.getElementById('sysmapTooltipLastMsg');
+    const sysmapGroupingSelect = document.getElementById('sysmapGrouping');
+    const sysmapInteractionWindowSelect = document.getElementById('sysmapInteractionWindow');
+    const sysmapMinEventsSelect = document.getElementById('sysmapMinEvents');
+    const sysmapCurrentTimeEl = document.getElementById('sysmapCurrentTime');
+    const sysmapTotalTimeEl = document.getElementById('sysmapTotalTime');
+    const smPlayPauseBtn = document.getElementById('smPlayPause');
+    const smTimeline = document.getElementById('smTimeline');
+    const smProgress = document.getElementById('smProgress');
+    const smScrubber = document.getElementById('smScrubber');
+    const smMarkers = document.getElementById('smMarkers');
+    const smCurrentLogEl = document.getElementById('smCurrentLog');
+    const smTotalLogsEl = document.getElementById('smTotalLogs');
+
+    // System Map State
+    let smPlaying = false;
+    let smCurrentIndex = 0;
+    let smPlaybackSpeed = 1;
+    let smAnimationFrame = null;
+    let smLastFrameTime = 0;
+    let smAccumulatedTime = 0;
+    let smCurrentTimeMs = 0;
+    let smGroupedModules = [];
+    let smModuleBoxes = [];
+    let smInteractions = [];
+    let smHoveredModule = null;
+    let smCallGraph = new Map(); // module -> { outgoing: Map<module, count>, incoming: Map<module, count> }
+    let smModuleLevels = new Map(); // module -> hierarchy level (0 = top callers)
+
+    // System Map Layout DOM
+    const sysmapLayoutSelect = document.getElementById('sysmapLayout');
+
+    function switchMode(mode) {
+      currentMode = mode;
+
+      modeToggle.querySelectorAll('.btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+      });
+
+      if (mode === 'logs') {
+        logViewContainer.classList.remove('hidden');
+        timeTravelContainer.classList.remove('active');
+        systemMapContainer.classList.remove('active');
+        ttPause();
+        smPause();
+      } else if (mode === 'timetravel') {
+        logViewContainer.classList.add('hidden');
+        timeTravelContainer.classList.add('active');
+        systemMapContainer.classList.remove('active');
+        smPause();
+        initTimeTravel();
+      } else if (mode === 'systemmap') {
+        logViewContainer.classList.add('hidden');
+        timeTravelContainer.classList.remove('active');
+        systemMapContainer.classList.add('active');
+        ttPause();
+        initSystemMap();
+      }
+    }
+
+    function initTimeTravel() {
+      if (logEntries.length === 0) {
+        ttLogFeed.innerHTML = `
+          <div class="empty-state">
+            <h2>No logs loaded</h2>
+            <p>Load logs first to use Time Travel mode</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Reset state
+      ttCurrentIndex = 0;
+      ttCurrentTimeMs = ttStartTimeMs;
+      ttAccumulatedTime = 0;
+
+      // Update UI
+      ttTotalTimeEl.textContent = formatMsToTime(ttEndTimeMs - ttStartTimeMs);
+      ttTotalLogsEl.textContent = logEntries.length;
+      updateTimeTravelUI();
+
+      // Render timeline markers (errors and warnings)
+      renderTimelineMarkers();
+
+      // Render activity lanes
+      renderActivityLanes();
+
+      // Clear log feed
+      ttLogFeed.innerHTML = `
+        <div class="empty-state">
+          <h2>Time Travel Mode</h2>
+          <p>Press play to watch logs unfold in real-time</p>
+        </div>
+      `;
+    }
+
+    function renderTimelineMarkers() {
+      ttMarkers.innerHTML = '';
+      const duration = ttEndTimeMs - ttStartTimeMs;
+      if (duration <= 0) return;
+
+      logEntries.forEach(entry => {
+        if (entry.level === 'error' || entry.level === 'warn') {
+          const position = ((entry.elapsedTimeMs - ttStartTimeMs) / duration) * 100;
+          const marker = document.createElement('div');
+          marker.className = `timeline-marker ${entry.level}`;
+          marker.style.left = `${position}%`;
+          ttMarkers.appendChild(marker);
+        }
+      });
+    }
+
+    function renderActivityLanes() {
+      ttActivityLanes.innerHTML = '';
+      const duration = ttEndTimeMs - ttStartTimeMs;
+      if (duration <= 0 || ttTopModules.length === 0) return;
+
+      // Group entries by module
+      const moduleEntries = new Map();
+      ttTopModules.forEach(mod => moduleEntries.set(mod, []));
+
+      logEntries.forEach((entry, idx) => {
+        if (moduleEntries.has(entry.module)) {
+          moduleEntries.get(entry.module).push({ ...entry, globalIndex: idx });
+        }
+      });
+
+      // Render lanes
+      ttTopModules.forEach(mod => {
+        const entries = moduleEntries.get(mod);
+        const lane = document.createElement('div');
+        lane.className = 'activity-lane';
+        lane.dataset.module = mod;
+
+        const label = document.createElement('div');
+        label.className = 'lane-label';
+        label.textContent = mod.split(':').pop(); // Show last part of module name
+        label.title = mod;
+        lane.appendChild(label);
+
+        const timeline = document.createElement('div');
+        timeline.className = 'lane-timeline';
+
+        // Add events
+        entries.forEach(entry => {
+          const position = ((entry.elapsedTimeMs - ttStartTimeMs) / duration) * 100;
+          const event = document.createElement('div');
+          event.className = `lane-event ${entry.level}`;
+          event.style.left = `${position}%`;
+          event.title = `${entry.elapsedTime}: ${entry.message.substring(0, 50)}...`;
+          event.dataset.index = entry.globalIndex;
+          event.addEventListener('click', () => seekToEntry(entry.globalIndex));
+          timeline.appendChild(event);
+        });
+
+        // Add playhead
+        const playhead = document.createElement('div');
+        playhead.className = 'lane-playhead';
+        playhead.style.left = '0%';
+        timeline.appendChild(playhead);
+
+        lane.appendChild(timeline);
+        ttActivityLanes.appendChild(lane);
+      });
+    }
+
+    function updateTimeTravelUI() {
+      const duration = ttEndTimeMs - ttStartTimeMs;
+      const elapsed = ttCurrentTimeMs - ttStartTimeMs;
+      const progress = duration > 0 ? (elapsed / duration) * 100 : 0;
+
+      // Update timeline
+      ttProgress.style.width = `${progress}%`;
+      ttScrubber.style.left = `${progress}%`;
+
+      // Update time display
+      ttCurrentTimeEl.textContent = formatMsToTime(elapsed);
+
+      // Update log counter
+      ttCurrentLogEl.textContent = ttCurrentIndex;
+
+      // Update activity lane playheads
+      ttActivityLanes.querySelectorAll('.lane-playhead').forEach(playhead => {
+        playhead.style.left = `${progress}%`;
+      });
+
+      // Update lane event opacity (past vs future)
+      ttActivityLanes.querySelectorAll('.lane-event').forEach(event => {
+        const idx = parseInt(event.dataset.index);
+        event.classList.toggle('future', idx >= ttCurrentIndex);
+      });
+
+      // Update active modules display
+      updateActiveModulesDisplay();
+    }
+
+    function updateActiveModulesDisplay() {
+      // Find modules active in the last 500ms
+      const windowMs = 500;
+      const activeInWindow = new Set();
+
+      for (let i = ttCurrentIndex - 1; i >= 0 && i >= ttCurrentIndex - 50; i--) {
+        const entry = logEntries[i];
+        if (ttCurrentTimeMs - entry.elapsedTimeMs <= windowMs) {
+          activeInWindow.add(entry.module);
+        } else {
+          break;
+        }
+      }
+
+      if (activeInWindow.size > 0) {
+        ttCurrentActivity.classList.remove('hidden');
+        ttActiveModulesEl.innerHTML = '';
+        activeInWindow.forEach(mod => {
+          const badge = document.createElement('span');
+          badge.className = 'current-module-badge';
+          badge.textContent = mod.split(':').pop();
+          badge.title = mod;
+          ttActiveModulesEl.appendChild(badge);
+        });
+
+        // Highlight active lanes
+        ttActivityLanes.querySelectorAll('.lane-label').forEach(label => {
+          const laneMod = label.parentElement.dataset.module;
+          label.classList.toggle('active', activeInWindow.has(laneMod));
+        });
+      } else {
+        ttCurrentActivity.classList.add('hidden');
+        ttActivityLanes.querySelectorAll('.lane-label').forEach(label => {
+          label.classList.remove('active');
+        });
+      }
+    }
+
+    function addLogToFeed(entry) {
+      // Remove empty state if present
+      const emptyState = ttLogFeed.querySelector('.empty-state');
+      if (emptyState) {
+        emptyState.remove();
+      }
+
+      const div = document.createElement('div');
+      div.className = `tt-log-entry level-${entry.level}`;
+
+      let messageHtml = entry.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+      let jsonHtml = '';
+      if (entry.json) {
+        jsonHtml = `
+          <span class="json-toggle" onclick="toggleJson(this)">JSON</span>
+          <div class="json-data">${highlightJson(entry.json)}</div>
+        `;
+      }
+
+      div.innerHTML = `
+        <span class="log-time">${entry.elapsedTime}</span>
+        <span class="log-level ${entry.level}">${entry.level.toUpperCase()}</span>
+        <span class="log-module" title="${entry.module}">${entry.module}</span>
+        <span class="log-message">${messageHtml}${jsonHtml}</span>
+      `;
+
+      ttLogFeed.appendChild(div);
+
+      // Keep only last 500 entries to prevent memory issues
+      while (ttLogFeed.children.length > 500) {
+        ttLogFeed.removeChild(ttLogFeed.firstChild);
+      }
+
+      // Auto-scroll
+      ttLogFeed.scrollTop = ttLogFeed.scrollHeight;
+    }
+
+    function ttPlay() {
+      if (ttPlaying) return;
+      if (ttCurrentIndex >= logEntries.length) {
+        // Reset to start if at end
+        ttCurrentIndex = 0;
+        ttCurrentTimeMs = ttStartTimeMs;
+        ttLogFeed.innerHTML = '';
+      }
+
+      ttPlaying = true;
+      ttLastFrameTime = performance.now();
+      ttAccumulatedTime = 0;
+
+      ttPlayPauseBtn.classList.add('playing');
+      ttPlayPauseBtn.querySelector('.play-icon').style.display = 'none';
+      ttPlayPauseBtn.querySelector('.pause-icon').style.display = 'block';
+
+      ttAnimationFrame = requestAnimationFrame(ttPlaybackLoop);
+    }
+
+    function ttPause() {
+      ttPlaying = false;
+      if (ttAnimationFrame) {
+        cancelAnimationFrame(ttAnimationFrame);
+        ttAnimationFrame = null;
+      }
+
+      ttPlayPauseBtn.classList.remove('playing');
+      ttPlayPauseBtn.querySelector('.play-icon').style.display = 'block';
+      ttPlayPauseBtn.querySelector('.pause-icon').style.display = 'none';
+    }
+
+    function ttPlaybackLoop(currentTime) {
+      if (!ttPlaying) return;
+
+      const deltaTime = currentTime - ttLastFrameTime;
+      ttLastFrameTime = currentTime;
+
+      // Accumulate time based on playback speed
+      ttAccumulatedTime += deltaTime * ttPlaybackSpeed;
+
+      // Add logs that should have appeared by now
+      while (ttCurrentIndex < logEntries.length) {
+        const entry = logEntries[ttCurrentIndex];
+        const entryOffset = entry.elapsedTimeMs - ttCurrentTimeMs;
+
+        if (entryOffset <= ttAccumulatedTime) {
+          addLogToFeed(entry);
+          ttCurrentIndex++;
+          ttAccumulatedTime -= entryOffset;
+          ttCurrentTimeMs = entry.elapsedTimeMs;
+        } else {
+          break;
+        }
+      }
+
+      // Update current time even if no new logs
+      if (ttCurrentIndex < logEntries.length) {
+        ttCurrentTimeMs += ttAccumulatedTime;
+        ttAccumulatedTime = 0;
+
+        // Cap at next entry time
+        const nextEntry = logEntries[ttCurrentIndex];
+        if (ttCurrentTimeMs > nextEntry.elapsedTimeMs) {
+          ttCurrentTimeMs = nextEntry.elapsedTimeMs;
+        }
+      }
+
+      updateTimeTravelUI();
+
+      // Check if finished
+      if (ttCurrentIndex >= logEntries.length) {
+        ttCurrentTimeMs = ttEndTimeMs;
+        updateTimeTravelUI();
+        ttPause();
+        return;
+      }
+
+      ttAnimationFrame = requestAnimationFrame(ttPlaybackLoop);
+    }
+
+    function ttStepForward() {
+      if (ttCurrentIndex >= logEntries.length) return;
+
+      const entry = logEntries[ttCurrentIndex];
+      addLogToFeed(entry);
+      ttCurrentIndex++;
+      ttCurrentTimeMs = entry.elapsedTimeMs;
+      updateTimeTravelUI();
+    }
+
+    function ttStepBack() {
+      if (ttCurrentIndex <= 0) return;
+
+      ttCurrentIndex--;
+      if (ttCurrentIndex > 0) {
+        ttCurrentTimeMs = logEntries[ttCurrentIndex - 1].elapsedTimeMs;
+      } else {
+        ttCurrentTimeMs = ttStartTimeMs;
+      }
+
+      // Remove last log from feed
+      if (ttLogFeed.lastChild && !ttLogFeed.lastChild.classList.contains('empty-state')) {
+        ttLogFeed.removeChild(ttLogFeed.lastChild);
+      }
+
+      updateTimeTravelUI();
+    }
+
+    function ttSkipToStart() {
+      ttPause();
+      ttCurrentIndex = 0;
+      ttCurrentTimeMs = ttStartTimeMs;
+      ttLogFeed.innerHTML = `
+        <div class="empty-state">
+          <h2>Time Travel Mode</h2>
+          <p>Press play to watch logs unfold in real-time</p>
+        </div>
+      `;
+      updateTimeTravelUI();
+    }
+
+    function ttSkipToEnd() {
+      ttPause();
+
+      // Add all remaining logs
+      while (ttCurrentIndex < logEntries.length) {
+        addLogToFeed(logEntries[ttCurrentIndex]);
+        ttCurrentIndex++;
+      }
+
+      ttCurrentTimeMs = ttEndTimeMs;
+      updateTimeTravelUI();
+    }
+
+    function seekToTime(timeMs) {
+      ttPause();
+
+      // Clear log feed
+      ttLogFeed.innerHTML = '';
+
+      // Find the entry at this time
+      let targetIndex = 0;
+      for (let i = 0; i < logEntries.length; i++) {
+        if (logEntries[i].elapsedTimeMs <= timeMs) {
+          targetIndex = i + 1;
+        } else {
+          break;
+        }
+      }
+
+      // Add logs up to this point (last 100 for performance)
+      const startIndex = Math.max(0, targetIndex - 100);
+      for (let i = startIndex; i < targetIndex; i++) {
+        addLogToFeed(logEntries[i]);
+      }
+
+      ttCurrentIndex = targetIndex;
+      ttCurrentTimeMs = timeMs;
+      updateTimeTravelUI();
+    }
+
+    function seekToEntry(index) {
+      if (index < 0 || index >= logEntries.length) return;
+      seekToTime(logEntries[index].elapsedTimeMs);
+    }
+
+    // Timeline scrubbing
+    let isDraggingScrubber = false;
+
+    ttTimeline.addEventListener('mousedown', (e) => {
+      isDraggingScrubber = true;
+      handleTimelineScrub(e);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDraggingScrubber) {
+        handleTimelineScrub(e);
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDraggingScrubber = false;
+    });
+
+    function handleTimelineScrub(e) {
+      const rect = ttTimeline.getBoundingClientRect();
+      const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      const progress = x / rect.width;
+      const duration = ttEndTimeMs - ttStartTimeMs;
+      const targetTime = ttStartTimeMs + (duration * progress);
+      seekToTime(targetTime);
+    }
+
+    // Event Listeners
+    modeToggle.addEventListener('click', (e) => {
+      if (e.target.classList.contains('btn')) {
+        switchMode(e.target.dataset.mode);
+      }
+    });
+
+    ttPlayPauseBtn.addEventListener('click', () => {
+      if (ttPlaying) {
+        ttPause();
+      } else {
+        ttPlay();
+      }
+    });
+
+    ttStepBackBtn.addEventListener('click', ttStepBack);
+    ttStepForwardBtn.addEventListener('click', ttStepForward);
+    ttSkipStartBtn.addEventListener('click', ttSkipToStart);
+    ttSkipEndBtn.addEventListener('click', ttSkipToEnd);
+
+    ttSpeedSelect.addEventListener('change', (e) => {
+      ttPlaybackSpeed = parseFloat(e.target.value);
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (currentMode !== 'timetravel') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          if (ttPlaying) ttPause(); else ttPlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          ttStepBack();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          ttStepForward();
+          break;
+        case 'Home':
+          e.preventDefault();
+          ttSkipToStart();
+          break;
+        case 'End':
+          e.preventDefault();
+          ttSkipToEnd();
+          break;
+      }
+    });
+
+    // Standard event listeners
+    toggleInputBtn.addEventListener('click', () => {
+      inputArea.classList.toggle('hidden');
+    });
+
+    clearBtn.addEventListener('click', () => {
+      logEntries = [];
+      modules = new Map();
+      activeModules = new Set();
+      metadata = {};
+      testResults = { passed: [], failed: [] };
+      logInput.value = '';
+
+      sidebar.classList.add('hidden');
+      metadataHeader.classList.add('hidden');
+      statsBar.classList.add('hidden');
+      testResultsSection.classList.add('hidden');
+      inputArea.classList.remove('hidden');
+
+      ttPause();
+      smPause();
+      switchMode('logs');
+
+      renderLogEntries();
+    });
+
+    autoScrollBtn.addEventListener('click', () => {
+      autoScroll = !autoScroll;
+      autoScrollBtn.textContent = `Auto-scroll: ${autoScroll ? 'On' : 'Off'}`;
+    });
+
+    parseBtn.addEventListener('click', () => {
+      const content = logInput.value.trim();
+      if (!content) return;
+
+      parseLogs(content);
+      sidebar.classList.remove('hidden');
+      inputArea.classList.add('hidden');
+
+      renderMetadata();
+      renderStats();
+      renderLogEntries();
+      renderModuleTree();
+      renderTestResults();
+
+      // Re-init views if in those modes
+      if (currentMode === 'timetravel') {
+        initTimeTravel();
+      } else if (currentMode === 'systemmap') {
+        initSystemMap();
+      }
+    });
+
+    levelFilters.addEventListener('click', (e) => {
+      if (e.target.classList.contains('filter-btn')) {
+        const level = e.target.dataset.level;
+        e.target.classList.toggle('active');
+
+        if (activeLevels.has(level)) {
+          activeLevels.delete(level);
+        } else {
+          activeLevels.add(level);
+        }
+
+        applyFilters();
+      }
+    });
+
+    let searchTimeout;
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        searchTerm = e.target.value;
+        applyFilters();
+      }, 150);
+    });
+
+    moduleSearch.addEventListener('input', (e) => {
+      const filter = e.target.value.toLowerCase();
+      const items = moduleTree.querySelectorAll('.module-item');
+      items.forEach(item => {
+        const module = item.dataset.module || '';
+        item.style.display = module.toLowerCase().includes(filter) || !filter ? '' : 'none';
+      });
+    });
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          logInput.value = event.target.result;
+          parseBtn.click();
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          logInput.value = event.target.result;
+          parseBtn.click();
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    // Load from URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const logUrl = urlParams.get('url');
+    if (logUrl) {
+      fetch(logUrl)
+        .then(res => res.text())
+        .then(content => {
+          logInput.value = content;
+          parseBtn.click();
+        })
+        .catch(err => console.error('Failed to load log from URL:', err));
+    }
+
+    // ============================================
+    // SYSTEM MAP MODE
+    // ============================================
+
+    function initSystemMap() {
+      if (logEntries.length === 0) return;
+
+      // Reset state
+      smCurrentIndex = 0;
+      smCurrentTimeMs = ttStartTimeMs;
+      smAccumulatedTime = 0;
+      smInteractions = [];
+
+      // Update UI
+      sysmapTotalTimeEl.textContent = formatMsToTime(ttEndTimeMs - ttStartTimeMs);
+      smTotalLogsEl.textContent = logEntries.length;
+
+      // Render timeline markers
+      renderSmTimelineMarkers();
+
+      // Group modules, build call graph, and calculate layout
+      computeModuleGroups();
+      computeCallGraph();
+      computeHierarchyLevels();
+      computeModuleLayout();
+
+      // Initial render
+      updateSystemMapUI();
+      renderSystemMap();
+    }
+
+    function computeModuleGroups() {
+      const depth = parseInt(sysmapGroupingSelect.value);
+      const minEvents = parseInt(sysmapMinEventsSelect.value);
+
+      // Group modules by depth
+      const grouped = new Map();
+
+      for (const [mod, count] of modules) {
+        const parts = mod.split(':');
+        const groupedName = depth === 99 ? mod : parts.slice(0, depth + 1).join(':');
+
+        if (!grouped.has(groupedName)) {
+          grouped.set(groupedName, {
+            name: groupedName,
+            shortName: depth === 99 ? parts[parts.length - 1] : parts[Math.min(depth, parts.length - 1)],
+            count: 0,
+            children: new Set(),
+            entries: [],
+            lastActivity: 0,
+            levelCounts: { error: 0, warn: 0, info: 0, verbose: 0, debug: 0 }
+          });
+        }
+
+        const group = grouped.get(groupedName);
+        group.count += count;
+        group.children.add(mod);
+      }
+
+      // Filter by minimum events
+      smGroupedModules = [...grouped.values()]
+        .filter(g => g.count >= minEvents)
+        .sort((a, b) => b.count - a.count);
+
+      // Assign entries to groups
+      logEntries.forEach((entry, idx) => {
+        const parts = entry.module.split(':');
+        const groupedName = depth === 99 ? entry.module : parts.slice(0, depth + 1).join(':');
+
+        const group = smGroupedModules.find(g => g.name === groupedName);
+        if (group) {
+          group.entries.push({ ...entry, globalIndex: idx });
+          group.levelCounts[entry.level]++;
+        }
+      });
+    }
+
+    function computeCallGraph() {
+      // Build a directed graph of caller -> callee relationships
+      // based on temporal proximity of log entries
+      smCallGraph.clear();
+
+      const depth = parseInt(sysmapGroupingSelect.value);
+      const windowMs = parseInt(sysmapInteractionWindowSelect.value);
+
+      // Initialize graph for all grouped modules
+      smGroupedModules.forEach(mod => {
+        smCallGraph.set(mod.name, {
+          outgoing: new Map(), // modules this one calls
+          incoming: new Map()  // modules that call this one
+        });
+      });
+
+      // Analyze consecutive log entries to infer call relationships
+      for (let i = 0; i < logEntries.length - 1; i++) {
+        const entry1 = logEntries[i];
+        const entry2 = logEntries[i + 1];
+
+        // Only consider entries within the interaction window
+        const timeDiff = entry2.elapsedTimeMs - entry1.elapsedTimeMs;
+        if (timeDiff > windowMs) continue;
+
+        // Get grouped names
+        const parts1 = entry1.module.split(':');
+        const parts2 = entry2.module.split(':');
+        const group1 = depth === 99 ? entry1.module : parts1.slice(0, depth + 1).join(':');
+        const group2 = depth === 99 ? entry2.module : parts2.slice(0, depth + 1).join(':');
+
+        // Skip if same module or either module not in our filtered set
+        if (group1 === group2) continue;
+        if (!smCallGraph.has(group1) || !smCallGraph.has(group2)) continue;
+
+        // Record the relationship: group1 -> group2 (group1 triggered group2)
+        const graph1 = smCallGraph.get(group1);
+        const graph2 = smCallGraph.get(group2);
+
+        graph1.outgoing.set(group2, (graph1.outgoing.get(group2) || 0) + 1);
+        graph2.incoming.set(group1, (graph2.incoming.get(group1) || 0) + 1);
+      }
+    }
+
+    function computeHierarchyLevels() {
+      // Assign each module to a hierarchy level based on call patterns
+      // Level 0 = top-level callers (high out-degree, low in-degree)
+      // Higher levels = more downstream/callee modules
+      smModuleLevels.clear();
+
+      if (smGroupedModules.length === 0) return;
+
+      // Calculate scores: ratio of outgoing to incoming calls
+      // Higher score = more of a "caller", lower score = more of a "callee"
+      const scores = new Map();
+
+      smGroupedModules.forEach(mod => {
+        const graph = smCallGraph.get(mod.name);
+        if (!graph) {
+          scores.set(mod.name, 0);
+          return;
+        }
+
+        let outTotal = 0;
+        let inTotal = 0;
+        graph.outgoing.forEach(count => outTotal += count);
+        graph.incoming.forEach(count => inTotal += count);
+
+        // Score: positive means more caller, negative means more callee
+        // Use log scale to handle large differences
+        const total = outTotal + inTotal;
+        if (total === 0) {
+          scores.set(mod.name, 0);
+        } else {
+          // Normalized score from -1 (pure callee) to +1 (pure caller)
+          const score = (outTotal - inTotal) / total;
+          scores.set(mod.name, score);
+        }
+      });
+
+      // Sort modules by score (highest first = top callers)
+      const sortedModules = [...scores.entries()]
+        .sort((a, b) => b[1] - a[1]);
+
+      // Assign levels based on score bands
+      // We'll create approximately sqrt(n) levels for good distribution
+      const numLevels = Math.max(3, Math.ceil(Math.sqrt(sortedModules.length)));
+      const modulesPerLevel = Math.ceil(sortedModules.length / numLevels);
+
+      sortedModules.forEach(([name, score], idx) => {
+        const level = Math.floor(idx / modulesPerLevel);
+        smModuleLevels.set(name, level);
+      });
+    }
+
+    function computeModuleLayout() {
+      const container = sysmapCanvasContainer;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      // Set canvas size
+      sysmapCanvas.width = width * window.devicePixelRatio;
+      sysmapCanvas.height = height * window.devicePixelRatio;
+      sysmapCanvas.style.width = width + 'px';
+      sysmapCanvas.style.height = height + 'px';
+      sysmapCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      // Calculate box dimensions
+      const boxWidth = 140;
+      const boxHeight = 80;
+      const padding = 20;
+
+      const layoutMode = sysmapLayoutSelect.value;
+
+      if (layoutMode === 'hierarchy') {
+        // Hierarchical layout: group by level, position levels top to bottom
+        const levelGroups = new Map();
+        const leftMargin = 70; // Space for level labels
+
+        smGroupedModules.forEach(mod => {
+          const level = smModuleLevels.get(mod.name) || 0;
+          if (!levelGroups.has(level)) {
+            levelGroups.set(level, []);
+          }
+          levelGroups.get(level).push(mod);
+        });
+
+        // Sort levels and calculate positions
+        const levels = [...levelGroups.keys()].sort((a, b) => a - b);
+        const numLevels = levels.length;
+
+        // Calculate vertical spacing based on available height
+        const levelHeight = boxHeight + padding;
+        const totalLevelHeight = numLevels * levelHeight;
+        const verticalOffset = Math.max(padding, (height - totalLevelHeight) / 2);
+
+        // Available width after left margin for labels
+        const availableWidth = width - leftMargin;
+
+        smModuleBoxes = [];
+
+        levels.forEach((level, levelIdx) => {
+          const modsAtLevel = levelGroups.get(level);
+          const numModsAtLevel = modsAtLevel.length;
+
+          // Calculate horizontal spacing for this level
+          const totalWidth = numModsAtLevel * boxWidth + (numModsAtLevel - 1) * padding;
+          const horizontalOffset = leftMargin + Math.max(padding, (availableWidth - totalWidth) / 2);
+
+          // Sort modules at this level by their connectivity (more connected = more central)
+          modsAtLevel.sort((a, b) => {
+            const graphA = smCallGraph.get(a.name);
+            const graphB = smCallGraph.get(b.name);
+            const connectionsA = graphA ? graphA.outgoing.size + graphA.incoming.size : 0;
+            const connectionsB = graphB ? graphB.outgoing.size + graphB.incoming.size : 0;
+            return connectionsB - connectionsA;
+          });
+
+          modsAtLevel.forEach((mod, idx) => {
+            // Position more connected modules toward center
+            const centerIdx = Math.floor(numModsAtLevel / 2);
+            let posIdx;
+            if (idx % 2 === 0) {
+              posIdx = centerIdx + Math.floor(idx / 2);
+            } else {
+              posIdx = centerIdx - Math.ceil(idx / 2);
+            }
+            posIdx = Math.max(0, Math.min(numModsAtLevel - 1, posIdx));
+
+            smModuleBoxes.push({
+              module: mod,
+              x: horizontalOffset + posIdx * (boxWidth + padding),
+              y: verticalOffset + levelIdx * levelHeight,
+              width: boxWidth,
+              height: boxHeight,
+              activity: 0,
+              recentActivity: 0,
+              level: level
+            });
+          });
+        });
+      } else {
+        // Grid layout (original behavior)
+        const cols = Math.max(1, Math.floor((width - padding) / (boxWidth + padding)));
+
+        smModuleBoxes = smGroupedModules.map((mod, idx) => {
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          return {
+            module: mod,
+            x: padding + col * (boxWidth + padding),
+            y: padding + row * (boxHeight + padding),
+            width: boxWidth,
+            height: boxHeight,
+            activity: 0,
+            recentActivity: 0
+          };
+        });
+      }
+    }
+
+    function renderSmTimelineMarkers() {
+      smMarkers.innerHTML = '';
+      const duration = ttEndTimeMs - ttStartTimeMs;
+      if (duration <= 0) return;
+
+      logEntries.forEach(entry => {
+        if (entry.level === 'error' || entry.level === 'warn') {
+          const position = ((entry.elapsedTimeMs - ttStartTimeMs) / duration) * 100;
+          const marker = document.createElement('div');
+          marker.className = `timeline-marker ${entry.level}`;
+          marker.style.left = `${position}%`;
+          smMarkers.appendChild(marker);
+        }
+      });
+    }
+
+    function updateSystemMapUI() {
+      const duration = ttEndTimeMs - ttStartTimeMs;
+      const elapsed = smCurrentTimeMs - ttStartTimeMs;
+      const progress = duration > 0 ? (elapsed / duration) * 100 : 0;
+
+      // Update timeline
+      smProgress.style.width = `${progress}%`;
+      smScrubber.style.left = `${progress}%`;
+
+      // Update time display
+      sysmapCurrentTimeEl.textContent = formatMsToTime(elapsed);
+      smCurrentLogEl.textContent = smCurrentIndex;
+
+      // Update module activity levels
+      const activityWindowMs = 200; // Current activity window
+      const recentWindowMs = 1000; // Recent activity window
+
+      smModuleBoxes.forEach(box => {
+        box.activity = 0;
+        box.recentActivity = 0;
+        box.module.lastMessage = null;
+
+        // Count entries in windows
+        for (const entry of box.module.entries) {
+          if (entry.globalIndex >= smCurrentIndex) break;
+
+          const timeDiff = smCurrentTimeMs - entry.elapsedTimeMs;
+          if (timeDiff >= 0 && timeDiff < activityWindowMs) {
+            box.activity++;
+            box.module.lastMessage = entry;
+          } else if (timeDiff >= 0 && timeDiff < recentWindowMs) {
+            box.recentActivity++;
+            if (!box.module.lastMessage) box.module.lastMessage = entry;
+          }
+        }
+      });
+
+      // Compute interactions (modules active within the interaction window)
+      computeInteractions();
+    }
+
+    function computeInteractions() {
+      const windowMs = parseInt(sysmapInteractionWindowSelect.value);
+      smInteractions = [];
+
+      // Find recent entries within the window
+      const recentEntries = [];
+      for (let i = smCurrentIndex - 1; i >= 0; i--) {
+        const entry = logEntries[i];
+        if (smCurrentTimeMs - entry.elapsedTimeMs > windowMs) break;
+        recentEntries.push(entry);
+      }
+
+      if (recentEntries.length < 2) return;
+
+      // Find interactions between consecutive entries from different modules
+      const depth = parseInt(sysmapGroupingSelect.value);
+
+      for (let i = 0; i < recentEntries.length - 1; i++) {
+        const entry1 = recentEntries[i];
+        const entry2 = recentEntries[i + 1];
+
+        const parts1 = entry1.module.split(':');
+        const parts2 = entry2.module.split(':');
+        const group1 = depth === 99 ? entry1.module : parts1.slice(0, depth + 1).join(':');
+        const group2 = depth === 99 ? entry2.module : parts2.slice(0, depth + 1).join(':');
+
+        if (group1 !== group2) {
+          // Find boxes for these modules
+          const box1 = smModuleBoxes.find(b => b.module.name === group1);
+          const box2 = smModuleBoxes.find(b => b.module.name === group2);
+
+          if (box1 && box2) {
+            const age = smCurrentTimeMs - entry1.elapsedTimeMs;
+            const strength = 1 - (age / windowMs);
+            smInteractions.push({ from: box1, to: box2, strength });
+          }
+        }
+      }
+    }
+
+    function renderSystemMap() {
+      const ctx = sysmapCtx;
+      const width = sysmapCanvasContainer.clientWidth;
+      const height = sysmapCanvasContainer.clientHeight;
+
+      // Clear canvas
+      ctx.clearRect(0, 0, width, height);
+
+      // Draw level labels if in hierarchy mode
+      const layoutMode = sysmapLayoutSelect.value;
+      if (layoutMode === 'hierarchy' && smModuleBoxes.length > 0) {
+        drawLevelLabels(ctx, height);
+      }
+
+      // Draw interactions first (behind boxes)
+      drawInteractions(ctx);
+
+      // Draw module boxes
+      smModuleBoxes.forEach(box => {
+        drawModuleBox(ctx, box);
+      });
+    }
+
+    function drawLevelLabels(ctx, canvasHeight) {
+      // Group boxes by level to find y positions
+      const levelYPositions = new Map();
+
+      smModuleBoxes.forEach(box => {
+        if (box.level !== undefined) {
+          if (!levelYPositions.has(box.level)) {
+            levelYPositions.set(box.level, box.y);
+          }
+        }
+      });
+
+      // Draw labels
+      ctx.font = '11px Consolas, Monaco, monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+
+      const levelLabels = ['Callers', 'Middle', 'Callees'];
+      const levels = [...levelYPositions.keys()].sort((a, b) => a - b);
+      const numLevels = levels.length;
+
+      levels.forEach((level, idx) => {
+        const y = levelYPositions.get(level) + 40; // Center of box
+        let label;
+
+        if (numLevels <= 3) {
+          // Use descriptive labels for small number of levels
+          if (idx === 0) label = '↓ Callers';
+          else if (idx === numLevels - 1) label = '↑ Callees';
+          else label = '↕ Middle';
+        } else {
+          // Use level numbers for many levels
+          if (idx === 0) label = `L${level} (top)`;
+          else if (idx === numLevels - 1) label = `L${level} (bottom)`;
+          else label = `L${level}`;
+        }
+
+        // Draw subtle level indicator line
+        ctx.strokeStyle = 'rgba(60, 60, 60, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(60, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Draw label
+        ctx.fillStyle = '#858585';
+        ctx.fillText(label, 5, y);
+      });
+    }
+
+    function drawInteractions(ctx) {
+      smInteractions.forEach(({ from, to, strength }) => {
+        const fromCenterX = from.x + from.width / 2;
+        const fromCenterY = from.y + from.height / 2;
+        const toCenterX = to.x + to.width / 2;
+        const toCenterY = to.y + to.height / 2;
+
+        // Draw curved line
+        const midX = (fromCenterX + toCenterX) / 2;
+        const midY = (fromCenterY + toCenterY) / 2;
+        const offset = Math.min(50, Math.abs(fromCenterY - toCenterY) * 0.3);
+
+        ctx.beginPath();
+        ctx.moveTo(fromCenterX, fromCenterY);
+        ctx.quadraticCurveTo(midX, midY - offset, toCenterX, toCenterY);
+
+        const alpha = Math.max(0.2, strength);
+        ctx.strokeStyle = `rgba(0, 122, 204, ${alpha})`;
+        ctx.lineWidth = 2 + strength * 2;
+        ctx.stroke();
+
+        // Draw arrow head
+        const angle = Math.atan2(toCenterY - (midY - offset), toCenterX - midX);
+        const arrowSize = 8;
+        ctx.beginPath();
+        ctx.moveTo(toCenterX, toCenterY);
+        ctx.lineTo(
+          toCenterX - arrowSize * Math.cos(angle - Math.PI / 6),
+          toCenterY - arrowSize * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+          toCenterX - arrowSize * Math.cos(angle + Math.PI / 6),
+          toCenterY - arrowSize * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fillStyle = `rgba(0, 122, 204, ${alpha})`;
+        ctx.fill();
+      });
+    }
+
+    function drawModuleBox(ctx, box) {
+      const { x, y, width, height, activity, recentActivity, module } = box;
+      const isHovered = smHoveredModule === box;
+
+      // Determine state and colors
+      let bgColor, borderColor, glowColor;
+      if (activity > 0) {
+        // Currently active
+        bgColor = 'rgba(0, 122, 204, 0.3)';
+        borderColor = '#007acc';
+        glowColor = 'rgba(0, 122, 204, 0.5)';
+      } else if (recentActivity > 0) {
+        // Recently active
+        bgColor = 'rgba(0, 122, 204, 0.15)';
+        borderColor = 'rgba(0, 122, 204, 0.6)';
+        glowColor = null;
+      } else {
+        // Idle
+        bgColor = '#2d2d30';
+        borderColor = '#3c3c3c';
+        glowColor = null;
+      }
+
+      // Draw glow effect for active modules
+      if (glowColor) {
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = 15;
+      }
+
+      // Draw box background
+      ctx.fillStyle = bgColor;
+      ctx.strokeStyle = isHovered ? '#007acc' : borderColor;
+      ctx.lineWidth = isHovered ? 2 : 1;
+
+      roundRect(ctx, x, y, width, height, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      // Reset shadow
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+
+      // Draw activity indicator bar at top
+      if (activity > 0 || recentActivity > 0) {
+        const totalRecent = activity + recentActivity;
+        const barHeight = 4;
+        const maxBarWidth = width - 8;
+        const barWidth = Math.min(maxBarWidth, (totalRecent / 10) * maxBarWidth);
+
+        ctx.fillStyle = activity > 0 ? '#007acc' : 'rgba(0, 122, 204, 0.5)';
+        roundRect(ctx, x + 4, y + 4, barWidth, barHeight, 2);
+        ctx.fill();
+      }
+
+      // Draw module name (full name, truncated if needed)
+      ctx.fillStyle = activity > 0 ? '#ffffff' : '#d4d4d4';
+      ctx.font = 'bold 10px Consolas, Monaco, monospace';
+      ctx.textAlign = 'center';
+
+      const fullName = module.name;
+      const maxChars = 18;
+      const displayName = fullName.length > maxChars
+        ? '...' + fullName.substring(fullName.length - maxChars + 3)
+        : fullName;
+      ctx.fillText(displayName, x + width / 2, y + 28);
+
+      // Draw stats
+      ctx.font = '10px Consolas, Monaco, monospace';
+      ctx.fillStyle = '#858585';
+
+      // Count of visible entries
+      const visibleCount = module.entries.filter(e => e.globalIndex < smCurrentIndex).length;
+      ctx.fillText(`${visibleCount} / ${module.count}`, x + width / 2, y + 44);
+
+      // Draw level indicators
+      const indicatorY = y + height - 16;
+      const indicatorSize = 8;
+      const levels = ['error', 'warn', 'info'];
+      const levelColors = {
+        error: '#f14c4c',
+        warn: '#dcdcaa',
+        info: '#4ec9b0'
+      };
+
+      let indicatorX = x + width / 2 - (levels.length * (indicatorSize + 4)) / 2;
+      levels.forEach(level => {
+        const count = module.entries
+          .filter(e => e.globalIndex < smCurrentIndex && e.level === level)
+          .length;
+
+        if (count > 0) {
+          ctx.fillStyle = levelColors[level];
+          ctx.beginPath();
+          ctx.arc(indicatorX + indicatorSize / 2, indicatorY, indicatorSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#1e1e1e';
+          ctx.font = 'bold 7px Consolas, Monaco, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(count > 99 ? '99+' : count, indicatorX + indicatorSize / 2, indicatorY + 3);
+        } else {
+          ctx.strokeStyle = '#3c3c3c';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(indicatorX + indicatorSize / 2, indicatorY, indicatorSize / 2, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        indicatorX += indicatorSize + 6;
+      });
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    // System Map Player Controls
+    function smPlay() {
+      if (smPlaying) return;
+      if (smCurrentIndex >= logEntries.length) {
+        smCurrentIndex = 0;
+        smCurrentTimeMs = ttStartTimeMs;
+      }
+
+      smPlaying = true;
+      smLastFrameTime = performance.now();
+      smAccumulatedTime = 0;
+
+      smPlayPauseBtn.classList.add('playing');
+      smPlayPauseBtn.querySelector('.play-icon').style.display = 'none';
+      smPlayPauseBtn.querySelector('.pause-icon').style.display = 'block';
+
+      smAnimationFrame = requestAnimationFrame(smPlaybackLoop);
+    }
+
+    function smPause() {
+      smPlaying = false;
+      if (smAnimationFrame) {
+        cancelAnimationFrame(smAnimationFrame);
+        smAnimationFrame = null;
+      }
+
+      smPlayPauseBtn.classList.remove('playing');
+      smPlayPauseBtn.querySelector('.play-icon').style.display = 'block';
+      smPlayPauseBtn.querySelector('.pause-icon').style.display = 'none';
+    }
+
+    function smPlaybackLoop(currentTime) {
+      if (!smPlaying) return;
+
+      const deltaTime = currentTime - smLastFrameTime;
+      smLastFrameTime = currentTime;
+
+      smAccumulatedTime += deltaTime * smPlaybackSpeed;
+
+      // Advance through log entries
+      while (smCurrentIndex < logEntries.length) {
+        const entry = logEntries[smCurrentIndex];
+        const entryOffset = entry.elapsedTimeMs - smCurrentTimeMs;
+
+        if (entryOffset <= smAccumulatedTime) {
+          smCurrentIndex++;
+          smAccumulatedTime -= entryOffset;
+          smCurrentTimeMs = entry.elapsedTimeMs;
+        } else {
+          break;
+        }
+      }
+
+      // Update time even without new logs
+      if (smCurrentIndex < logEntries.length) {
+        smCurrentTimeMs += smAccumulatedTime;
+        smAccumulatedTime = 0;
+        const nextEntry = logEntries[smCurrentIndex];
+        if (smCurrentTimeMs > nextEntry.elapsedTimeMs) {
+          smCurrentTimeMs = nextEntry.elapsedTimeMs;
+        }
+      }
+
+      updateSystemMapUI();
+      renderSystemMap();
+
+      if (smCurrentIndex >= logEntries.length) {
+        smCurrentTimeMs = ttEndTimeMs;
+        updateSystemMapUI();
+        renderSystemMap();
+        smPause();
+        return;
+      }
+
+      smAnimationFrame = requestAnimationFrame(smPlaybackLoop);
+    }
+
+    function smStepForward() {
+      if (smCurrentIndex >= logEntries.length) return;
+      const entry = logEntries[smCurrentIndex];
+      smCurrentIndex++;
+      smCurrentTimeMs = entry.elapsedTimeMs;
+      updateSystemMapUI();
+      renderSystemMap();
+    }
+
+    function smStepBack() {
+      if (smCurrentIndex <= 0) return;
+      smCurrentIndex--;
+      smCurrentTimeMs = smCurrentIndex > 0 ? logEntries[smCurrentIndex - 1].elapsedTimeMs : ttStartTimeMs;
+      updateSystemMapUI();
+      renderSystemMap();
+    }
+
+    function smSkipToStart() {
+      smPause();
+      smCurrentIndex = 0;
+      smCurrentTimeMs = ttStartTimeMs;
+      updateSystemMapUI();
+      renderSystemMap();
+    }
+
+    function smSkipToEnd() {
+      smPause();
+      smCurrentIndex = logEntries.length;
+      smCurrentTimeMs = ttEndTimeMs;
+      updateSystemMapUI();
+      renderSystemMap();
+    }
+
+    function smSeekToTime(timeMs) {
+      smPause();
+
+      let targetIndex = 0;
+      for (let i = 0; i < logEntries.length; i++) {
+        if (logEntries[i].elapsedTimeMs <= timeMs) {
+          targetIndex = i + 1;
+        } else {
+          break;
+        }
+      }
+
+      smCurrentIndex = targetIndex;
+      smCurrentTimeMs = timeMs;
+      updateSystemMapUI();
+      renderSystemMap();
+    }
+
+    // System Map Event Listeners
+    smPlayPauseBtn.addEventListener('click', () => {
+      if (smPlaying) smPause(); else smPlay();
+    });
+
+    document.getElementById('smStepBack').addEventListener('click', smStepBack);
+    document.getElementById('smStepForward').addEventListener('click', smStepForward);
+    document.getElementById('smSkipStart').addEventListener('click', smSkipToStart);
+    document.getElementById('smSkipEnd').addEventListener('click', smSkipToEnd);
+
+    document.getElementById('smSpeed').addEventListener('change', (e) => {
+      smPlaybackSpeed = parseFloat(e.target.value);
+    });
+
+    // Timeline scrubbing for system map
+    let isDraggingSmScrubber = false;
+
+    smTimeline.addEventListener('mousedown', (e) => {
+      isDraggingSmScrubber = true;
+      handleSmTimelineScrub(e);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDraggingSmScrubber) {
+        handleSmTimelineScrub(e);
+      }
+
+      // Handle canvas hover for tooltip
+      if (currentMode === 'systemmap') {
+        handleCanvasHover(e);
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDraggingSmScrubber = false;
+    });
+
+    function handleSmTimelineScrub(e) {
+      const rect = smTimeline.getBoundingClientRect();
+      const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      const progress = x / rect.width;
+      const duration = ttEndTimeMs - ttStartTimeMs;
+      const targetTime = ttStartTimeMs + (duration * progress);
+      smSeekToTime(targetTime);
+    }
+
+    function handleCanvasHover(e) {
+      const rect = sysmapCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      let found = null;
+      for (const box of smModuleBoxes) {
+        if (x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height) {
+          found = box;
+          break;
+        }
+      }
+
+      if (found !== smHoveredModule) {
+        smHoveredModule = found;
+        renderSystemMap();
+
+        if (found) {
+          showModuleTooltip(found, e.clientX, e.clientY);
+        } else {
+          hideModuleTooltip();
+        }
+      } else if (found) {
+        // Update tooltip position
+        sysmapTooltip.style.left = (e.clientX + 15) + 'px';
+        sysmapTooltip.style.top = (e.clientY + 15) + 'px';
+      }
+    }
+
+    function showModuleTooltip(box, mouseX, mouseY) {
+      const mod = box.module;
+      const visibleEntries = mod.entries.filter(e => e.globalIndex < smCurrentIndex);
+
+      sysmapTooltipTitle.textContent = mod.name;
+
+      // Get call graph info
+      const graph = smCallGraph.get(mod.name);
+      let outgoingTotal = 0;
+      let incomingTotal = 0;
+      let topCallees = [];
+      let topCallers = [];
+
+      if (graph) {
+        graph.outgoing.forEach((count, target) => {
+          outgoingTotal += count;
+          topCallees.push({ name: target, count });
+        });
+        graph.incoming.forEach((count, source) => {
+          incomingTotal += count;
+          topCallers.push({ name: source, count });
+        });
+        topCallees.sort((a, b) => b.count - a.count);
+        topCallers.sort((a, b) => b.count - a.count);
+      }
+
+      const level = smModuleLevels.get(mod.name);
+      const levelLabel = level !== undefined ? ` (L${level})` : '';
+
+      let statsHtml = `
+        <span class="label">Total events:</span><span class="value">${mod.count}</span>
+        <span class="label">Visible:</span><span class="value">${visibleEntries.length}</span>
+        <span class="label">Errors:</span><span class="value" style="color: var(--error-color)">${mod.levelCounts.error}</span>
+        <span class="label">Warnings:</span><span class="value" style="color: var(--warn-color)">${mod.levelCounts.warn}</span>
+      `;
+
+      // Add call graph stats if in hierarchy mode
+      if (sysmapLayoutSelect.value === 'hierarchy') {
+        statsHtml += `
+          <span class="label">Hierarchy:</span><span class="value">Level ${level || 0}</span>
+          <span class="label">Calls out:</span><span class="value">${outgoingTotal} → ${graph ? graph.outgoing.size : 0} modules</span>
+          <span class="label">Called by:</span><span class="value">${incomingTotal} ← ${graph ? graph.incoming.size : 0} modules</span>
+        `;
+
+        // Show top connections
+        if (topCallees.length > 0) {
+          const topCallee = topCallees[0];
+          statsHtml += `<span class="label">Top callee:</span><span class="value">${topCallee.name.split(':').pop()} (${topCallee.count})</span>`;
+        }
+        if (topCallers.length > 0) {
+          const topCaller = topCallers[0];
+          statsHtml += `<span class="label">Top caller:</span><span class="value">${topCaller.name.split(':').pop()} (${topCaller.count})</span>`;
+        }
+      }
+
+      sysmapTooltipStats.innerHTML = statsHtml;
+
+      if (mod.lastMessage) {
+        const msg = mod.lastMessage.message.length > 100
+          ? mod.lastMessage.message.substring(0, 100) + '...'
+          : mod.lastMessage.message;
+        sysmapTooltipLastMsg.textContent = `Last: ${mod.lastMessage.elapsedTime} - ${msg}`;
+        sysmapTooltipLastMsg.style.display = 'block';
+      } else {
+        sysmapTooltipLastMsg.style.display = 'none';
+      }
+
+      sysmapTooltip.style.left = (mouseX + 15) + 'px';
+      sysmapTooltip.style.top = (mouseY + 15) + 'px';
+      sysmapTooltip.classList.remove('hidden');
+    }
+
+    function hideModuleTooltip() {
+      sysmapTooltip.classList.add('hidden');
+    }
+
+    // Re-layout on control changes
+    sysmapLayoutSelect.addEventListener('change', () => {
+      computeModuleLayout();
+      updateSystemMapUI();
+      renderSystemMap();
+    });
+
+    sysmapGroupingSelect.addEventListener('change', () => {
+      computeModuleGroups();
+      computeCallGraph();
+      computeHierarchyLevels();
+      computeModuleLayout();
+      updateSystemMapUI();
+      renderSystemMap();
+    });
+
+    sysmapInteractionWindowSelect.addEventListener('change', () => {
+      // Interaction window also affects the call graph analysis
+      computeCallGraph();
+      computeHierarchyLevels();
+      computeModuleLayout();
+      updateSystemMapUI();
+      renderSystemMap();
+    });
+
+    sysmapMinEventsSelect.addEventListener('change', () => {
+      computeModuleGroups();
+      computeCallGraph();
+      computeHierarchyLevels();
+      computeModuleLayout();
+      updateSystemMapUI();
+      renderSystemMap();
+    });
+
+    // Resize handler
+    window.addEventListener('resize', () => {
+      if (currentMode === 'systemmap' && smModuleBoxes.length > 0) {
+        computeModuleLayout();
+        renderSystemMap();
+      }
+    });
+
+    // Keyboard shortcuts for system map
+    document.addEventListener('keydown', (e) => {
+      if (currentMode !== 'systemmap') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          if (smPlaying) smPause(); else smPlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          smStepBack();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          smStepForward();
+          break;
+        case 'Home':
+          e.preventDefault();
+          smSkipToStart();
+          break;
+        case 'End':
+          e.preventDefault();
+          smSkipToEnd();
+          break;
+      }
+    });
+
+    // Save filter preferences to localStorage
+    function savePreferences() {
+      localStorage.setItem('aztec-log-viewer-levels', JSON.stringify([...activeLevels]));
+    }
+
+    function loadPreferences() {
+      const savedLevels = localStorage.getItem('aztec-log-viewer-levels');
+      if (savedLevels) {
+        try {
+          activeLevels = new Set(JSON.parse(savedLevels));
+          levelFilters.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.toggle('active', activeLevels.has(btn.dataset.level));
+          });
+        } catch (e) {}
+      }
+    }
+
+    loadPreferences();
+    levelFilters.addEventListener('click', savePreferences);
+  </script>
+</body>
+</html>
