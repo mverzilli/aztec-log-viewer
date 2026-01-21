@@ -577,6 +577,66 @@
       color: var(--error-color);
     }
 
+    /* Credentials Modal */
+    .credentials-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .credentials-modal.hidden {
+      display: none;
+    }
+
+    .credentials-content {
+      background: var(--bg-secondary);
+      padding: 24px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      min-width: 300px;
+    }
+
+    .credentials-content h3 {
+      margin-bottom: 8px;
+    }
+
+    .credentials-content p {
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      font-size: 12px;
+    }
+
+    .credentials-content input {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+
+    .credentials-content input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .credentials-buttons {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+
     /* Empty State */
     .empty-state {
       display: flex;
@@ -1198,6 +1258,10 @@
         <p>Drag & drop a log file here, or paste log content below</p>
         <input type="file" id="fileInput" style="display: none" accept=".log,.txt">
         <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Choose File</button>
+        <div style="margin-top: 15px; display: flex; gap: 8px; align-items: center;">
+          <input type="text" id="urlInput" class="search-input" placeholder="Paste log URL..." style="flex: 1;">
+          <button class="btn btn-primary" id="loadUrlBtn">Load URL</button>
+        </div>
         <textarea id="logInput" placeholder="Paste log content here..."></textarea>
         <div style="margin-top: 12px">
           <button class="btn btn-primary" id="parseBtn">Parse Logs</button>
@@ -1479,6 +1543,20 @@
           <div class="sysmap-tooltip-stats" id="sysmapTooltipStats"></div>
           <div class="sysmap-tooltip-last-msg" id="sysmapTooltipLastMsg"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Credentials Modal -->
+  <div class="credentials-modal hidden" id="credentialsModal">
+    <div class="credentials-content">
+      <h3>Authentication Required</h3>
+      <p>The server requires credentials.</p>
+      <input type="text" id="authUsername" placeholder="Username">
+      <input type="password" id="authPassword" placeholder="Password">
+      <div class="credentials-buttons">
+        <button class="btn" id="authCancel">Cancel</button>
+        <button class="btn btn-primary" id="authSubmit">Submit</button>
       </div>
     </div>
   </div>
@@ -1850,22 +1928,70 @@
         }
       }
 
+      // Collect all descendant module paths (including self if it's a leaf)
+      function collectDescendants(node, paths = []) {
+        if (node.children.size === 0) {
+          // Leaf node - this is an actual module
+          paths.push(node.fullPath);
+        } else {
+          // Parent node - collect from children
+          for (const [, childNode] of node.children) {
+            collectDescendants(childNode, paths);
+          }
+        }
+        return paths;
+      }
+
       function renderNode(name, node, depth = 0) {
         const div = document.createElement('div');
-        div.className = 'module-item' + (activeModules.has(node.fullPath) ? ' active' : '');
+        const hasChildren = node.children.size > 0;
+
+        // For parents, check if all descendants are active
+        let isActive;
+        if (hasChildren) {
+          const descendants = collectDescendants(node);
+          isActive = descendants.length > 0 && descendants.every(p => activeModules.has(p));
+        } else {
+          isActive = activeModules.has(node.fullPath);
+        }
+
+        // If name is just a number, show parent:number format
+        let displayName = name;
+        if (/^\d+$/.test(name)) {
+          const parts = node.fullPath.split(':');
+          if (parts.length >= 2) {
+            displayName = parts.slice(-2).join(':');
+          }
+        }
+
+        div.className = 'module-item' + (isActive ? ' active' : '');
         div.style.paddingLeft = (depth * 16 + 8) + 'px';
         div.dataset.module = node.fullPath;
 
-        const hasChildren = node.children.size > 0;
         div.innerHTML = `
           <span class="module-toggle">${hasChildren ? '▶' : ''}</span>
-          <span>${name}</span>
+          <span>${displayName}</span>
           <span class="count">${node.count}</span>
         `;
 
         div.addEventListener('click', (e) => {
           e.stopPropagation();
-          toggleModule(node.fullPath);
+          if (hasChildren) {
+            // Toggle all descendants
+            const descendants = collectDescendants(node);
+            const allActive = descendants.every(p => activeModules.has(p));
+            if (allActive) {
+              // Deselect all descendants
+              descendants.forEach(p => activeModules.delete(p));
+            } else {
+              // Select all descendants
+              descendants.forEach(p => activeModules.add(p));
+            }
+            renderModuleTree();
+            applyFilters();
+          } else {
+            toggleModule(node.fullPath);
+          }
         });
 
         moduleTree.appendChild(div);
@@ -1885,7 +2011,13 @@
         <span class="count">${logEntries.length}</span>
       `;
       allDiv.addEventListener('click', () => {
-        activeModules = new Set(modules.keys());
+        if (activeModules.size === modules.size) {
+          // All selected -> deselect all
+          activeModules = new Set();
+        } else {
+          // Some or none selected -> select all
+          activeModules = new Set(modules.keys());
+        }
         renderModuleTree();
         applyFilters();
       });
@@ -2642,17 +2774,97 @@
       }
     });
 
+    // URL loading elements
+    const urlInput = document.getElementById('urlInput');
+    const loadUrlBtn = document.getElementById('loadUrlBtn');
+    const credentialsModal = document.getElementById('credentialsModal');
+    const authUsername = document.getElementById('authUsername');
+    const authPassword = document.getElementById('authPassword');
+    const authSubmit = document.getElementById('authSubmit');
+    const authCancel = document.getElementById('authCancel');
+
+    let pendingUrl = null;
+
+    async function loadFromUrl(url, credentials = null) {
+      const headers = {};
+      if (credentials) {
+        headers['Authorization'] = 'Basic ' + btoa(credentials.username + ':' + credentials.password);
+      }
+
+      try {
+        const res = await fetch(url, { headers });
+
+        if (res.status === 401) {
+          // Auth required - show modal
+          pendingUrl = url;
+          credentialsModal.classList.remove('hidden');
+          authUsername.focus();
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const content = await res.text();
+        logInput.value = content;
+        parseBtn.click();
+
+        // Hide input area after successful load
+        inputArea.classList.add('hidden');
+      } catch (err) {
+        alert('Failed to load log from URL: ' + err.message);
+      }
+    }
+
+    loadUrlBtn.addEventListener('click', () => {
+      const url = urlInput.value.trim();
+      if (!url) return;
+      loadFromUrl(url);
+    });
+
+    urlInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        loadUrlBtn.click();
+      }
+    });
+
+    authSubmit.addEventListener('click', () => {
+      const credentials = {
+        username: authUsername.value,
+        password: authPassword.value
+      };
+      credentialsModal.classList.add('hidden');
+      authUsername.value = '';
+      authPassword.value = '';
+
+      if (pendingUrl) {
+        loadFromUrl(pendingUrl, credentials);
+        pendingUrl = null;
+      }
+    });
+
+    authCancel.addEventListener('click', () => {
+      credentialsModal.classList.add('hidden');
+      authUsername.value = '';
+      authPassword.value = '';
+      pendingUrl = null;
+    });
+
+    // Close modal on Escape, submit on Enter
+    credentialsModal.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        authCancel.click();
+      } else if (e.key === 'Enter') {
+        authSubmit.click();
+      }
+    });
+
     // Load from URL parameter
     const urlParams = new URLSearchParams(window.location.search);
     const logUrl = urlParams.get('url');
     if (logUrl) {
-      fetch(logUrl)
-        .then(res => res.text())
-        .then(content => {
-          logInput.value = content;
-          parseBtn.click();
-        })
-        .catch(err => console.error('Failed to load log from URL:', err));
+      loadFromUrl(logUrl);
     }
 
     // ============================================
@@ -2778,17 +2990,59 @@
 
     function computeHierarchyLevels() {
       // Assign each module to a hierarchy level based on call patterns
-      // Level 0 = top-level callers (high out-degree, low in-degree)
-      // Higher levels = more downstream/callee modules
+      // Level 0 = sequencers (own tier)
+      // Level 1 = nodes (own tier)
+      // Level 2 = p2p instances (p2p:number) (own tier)
+      // Level 3+ = other modules by call patterns
       smModuleLevels.clear();
 
       if (smGroupedModules.length === 0) return;
 
-      // Calculate scores: ratio of outgoing to incoming calls
-      // Higher score = more of a "caller", lower score = more of a "callee"
-      const scores = new Map();
+      // Separate sequencers, nodes, p2p instances, and other modules
+      const sequencers = [];
+      const nodes = [];
+      const p2pInstances = [];
+      const otherModules = [];
 
       smGroupedModules.forEach(mod => {
+        const nameLower = mod.name.toLowerCase();
+        const lastPart = mod.name.split(':').pop();
+
+        if (nameLower.includes('sequencer')) {
+          sequencers.push(mod);
+        } else if (nameLower.includes('node')) {
+          nodes.push(mod);
+        } else if (nameLower.startsWith('p2p') && /^\d+$/.test(lastPart)) {
+          // p2p modules ending with a number (p2p:0, p2p:1, etc.)
+          p2pInstances.push(mod);
+        } else {
+          otherModules.push(mod);
+        }
+      });
+
+      // Put all sequencers at level 0
+      let currentLevel = 0;
+      sequencers.forEach(mod => {
+        smModuleLevels.set(mod.name, currentLevel);
+      });
+      if (sequencers.length > 0) currentLevel++;
+
+      // Put all nodes at next level
+      nodes.forEach(mod => {
+        smModuleLevels.set(mod.name, currentLevel);
+      });
+      if (nodes.length > 0) currentLevel++;
+
+      // Put all p2p instances at next level
+      p2pInstances.forEach(mod => {
+        smModuleLevels.set(mod.name, currentLevel);
+      });
+      if (p2pInstances.length > 0) currentLevel++;
+
+      // Calculate scores for remaining modules
+      const scores = new Map();
+
+      otherModules.forEach(mod => {
         const graph = smCallGraph.get(mod.name);
         if (!graph) {
           scores.set(mod.name, 0);
@@ -2800,29 +3054,26 @@
         graph.outgoing.forEach(count => outTotal += count);
         graph.incoming.forEach(count => inTotal += count);
 
-        // Score: positive means more caller, negative means more callee
-        // Use log scale to handle large differences
         const total = outTotal + inTotal;
         if (total === 0) {
           scores.set(mod.name, 0);
         } else {
-          // Normalized score from -1 (pure callee) to +1 (pure caller)
           const score = (outTotal - inTotal) / total;
           scores.set(mod.name, score);
         }
       });
 
-      // Sort modules by score (highest first = top callers)
+      // Sort remaining modules by score
       const sortedModules = [...scores.entries()]
         .sort((a, b) => b[1] - a[1]);
 
-      // Assign levels based on score bands
-      // We'll create approximately sqrt(n) levels for good distribution
+      // Assign levels starting after special tiers
+      const startLevel = currentLevel;
       const numLevels = Math.max(3, Math.ceil(Math.sqrt(sortedModules.length)));
       const modulesPerLevel = Math.ceil(sortedModules.length / numLevels);
 
       sortedModules.forEach(([name, score], idx) => {
-        const level = Math.floor(idx / modulesPerLevel);
+        const level = startLevel + Math.floor(idx / modulesPerLevel);
         smModuleLevels.set(name, level);
       });
     }
@@ -2849,7 +3100,7 @@
       if (layoutMode === 'hierarchy') {
         // Hierarchical layout: group by level, position levels top to bottom
         const levelGroups = new Map();
-        const leftMargin = 70; // Space for level labels
+        const leftMargin = padding; // No extra space needed for labels
 
         smGroupedModules.forEach(mod => {
           const level = smModuleLevels.get(mod.name) || 0;
@@ -2881,37 +3132,75 @@
           const totalWidth = numModsAtLevel * boxWidth + (numModsAtLevel - 1) * padding;
           const horizontalOffset = leftMargin + Math.max(padding, (availableWidth - totalWidth) / 2);
 
-          // Sort modules at this level by their connectivity (more connected = more central)
-          modsAtLevel.sort((a, b) => {
-            const graphA = smCallGraph.get(a.name);
-            const graphB = smCallGraph.get(b.name);
-            const connectionsA = graphA ? graphA.outgoing.size + graphA.incoming.size : 0;
-            const connectionsB = graphB ? graphB.outgoing.size + graphB.incoming.size : 0;
-            return connectionsB - connectionsA;
+          // Check if this level contains sequencers, nodes, or p2p instances (special tiers sorted by name)
+          const isSpecialTier = modsAtLevel.every(mod => {
+            const nameLower = mod.name.toLowerCase();
+            const lastPart = mod.name.split(':').pop();
+            const isP2pInstance = nameLower.startsWith('p2p') && /^\d+$/.test(lastPart);
+            return nameLower.includes('sequencer') || nameLower.includes('node') || isP2pInstance;
           });
 
-          modsAtLevel.forEach((mod, idx) => {
-            // Position more connected modules toward center
-            const centerIdx = Math.floor(numModsAtLevel / 2);
-            let posIdx;
-            if (idx % 2 === 0) {
-              posIdx = centerIdx + Math.floor(idx / 2);
-            } else {
-              posIdx = centerIdx - Math.ceil(idx / 2);
-            }
-            posIdx = Math.max(0, Math.min(numModsAtLevel - 1, posIdx));
+          if (isSpecialTier) {
+            // Sort sequencers/nodes by name: letters first, then numbers
+            modsAtLevel.sort((a, b) => {
+              // Get the last part of the name (instance identifier)
+              const lastA = a.name.split(':').pop();
+              const lastB = b.name.split(':').pop();
+              const aStartsWithLetter = /^[a-zA-Z]/.test(lastA);
+              const bStartsWithLetter = /^[a-zA-Z]/.test(lastB);
 
-            smModuleBoxes.push({
-              module: mod,
-              x: horizontalOffset + posIdx * (boxWidth + padding),
-              y: verticalOffset + levelIdx * levelHeight,
-              width: boxWidth,
-              height: boxHeight,
-              activity: 0,
-              recentActivity: 0,
-              level: level
+              // Letters come before numbers
+              if (aStartsWithLetter && !bStartsWithLetter) return -1;
+              if (!aStartsWithLetter && bStartsWithLetter) return 1;
+
+              // Otherwise sort by name with numeric sorting
+              return a.name.localeCompare(b.name, undefined, { numeric: true });
             });
-          });
+            modsAtLevel.forEach((mod, idx) => {
+              smModuleBoxes.push({
+                module: mod,
+                x: horizontalOffset + idx * (boxWidth + padding),
+                y: verticalOffset + levelIdx * levelHeight,
+                width: boxWidth,
+                height: boxHeight,
+                activity: 0,
+                recentActivity: 0,
+                level: level
+              });
+            });
+          } else {
+            // Sort by connectivity (more connected = more central)
+            modsAtLevel.sort((a, b) => {
+              const graphA = smCallGraph.get(a.name);
+              const graphB = smCallGraph.get(b.name);
+              const connectionsA = graphA ? graphA.outgoing.size + graphA.incoming.size : 0;
+              const connectionsB = graphB ? graphB.outgoing.size + graphB.incoming.size : 0;
+              return connectionsB - connectionsA;
+            });
+
+            modsAtLevel.forEach((mod, idx) => {
+              // Position more connected modules toward center
+              const centerIdx = Math.floor(numModsAtLevel / 2);
+              let posIdx;
+              if (idx % 2 === 0) {
+                posIdx = centerIdx + Math.floor(idx / 2);
+              } else {
+                posIdx = centerIdx - Math.ceil(idx / 2);
+              }
+              posIdx = Math.max(0, Math.min(numModsAtLevel - 1, posIdx));
+
+              smModuleBoxes.push({
+                module: mod,
+                x: horizontalOffset + posIdx * (boxWidth + padding),
+                y: verticalOffset + levelIdx * levelHeight,
+                width: boxWidth,
+                height: boxHeight,
+                activity: 0,
+                recentActivity: 0,
+                level: level
+              });
+            });
+          }
         });
       } else {
         // Grid layout (original behavior)
@@ -3038,11 +3327,7 @@
       // Clear canvas
       ctx.clearRect(0, 0, width, height);
 
-      // Draw level labels if in hierarchy mode
-      const layoutMode = sysmapLayoutSelect.value;
-      if (layoutMode === 'hierarchy' && smModuleBoxes.length > 0) {
-        drawLevelLabels(ctx, height);
-      }
+      // No level labels drawn
 
       // Draw interactions first (behind boxes)
       drawInteractions(ctx);
@@ -3050,59 +3335,6 @@
       // Draw module boxes
       smModuleBoxes.forEach(box => {
         drawModuleBox(ctx, box);
-      });
-    }
-
-    function drawLevelLabels(ctx, canvasHeight) {
-      // Group boxes by level to find y positions
-      const levelYPositions = new Map();
-
-      smModuleBoxes.forEach(box => {
-        if (box.level !== undefined) {
-          if (!levelYPositions.has(box.level)) {
-            levelYPositions.set(box.level, box.y);
-          }
-        }
-      });
-
-      // Draw labels
-      ctx.font = '11px Consolas, Monaco, monospace';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-
-      const levelLabels = ['Callers', 'Middle', 'Callees'];
-      const levels = [...levelYPositions.keys()].sort((a, b) => a - b);
-      const numLevels = levels.length;
-
-      levels.forEach((level, idx) => {
-        const y = levelYPositions.get(level) + 40; // Center of box
-        let label;
-
-        if (numLevels <= 3) {
-          // Use descriptive labels for small number of levels
-          if (idx === 0) label = '↓ Callers';
-          else if (idx === numLevels - 1) label = '↑ Callees';
-          else label = '↕ Middle';
-        } else {
-          // Use level numbers for many levels
-          if (idx === 0) label = `L${level} (top)`;
-          else if (idx === numLevels - 1) label = `L${level} (bottom)`;
-          else label = `L${level}`;
-        }
-
-        // Draw subtle level indicator line
-        ctx.strokeStyle = 'rgba(60, 60, 60, 0.5)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(60, y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Draw label
-        ctx.fillStyle = '#858585';
-        ctx.fillText(label, 5, y);
       });
     }
 
@@ -3501,9 +3733,6 @@
         topCallers.sort((a, b) => b.count - a.count);
       }
 
-      const level = smModuleLevels.get(mod.name);
-      const levelLabel = level !== undefined ? ` (L${level})` : '';
-
       let statsHtml = `
         <span class="label">Total events:</span><span class="value">${mod.count}</span>
         <span class="label">Visible:</span><span class="value">${visibleEntries.length}</span>
@@ -3514,7 +3743,6 @@
       // Add call graph stats if in hierarchy mode
       if (sysmapLayoutSelect.value === 'hierarchy') {
         statsHtml += `
-          <span class="label">Hierarchy:</span><span class="value">Level ${level || 0}</span>
           <span class="label">Calls out:</span><span class="value">${outgoingTotal} → ${graph ? graph.outgoing.size : 0} modules</span>
           <span class="label">Called by:</span><span class="value">${incomingTotal} ← ${graph ? graph.incoming.size : 0} modules</span>
         `;
